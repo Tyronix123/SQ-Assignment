@@ -1,5 +1,6 @@
 import sqlite3
 from cryptography.fernet import Fernet
+import os
 
 class DBHandler:
     def __init__(self, db_name, encryption_key):
@@ -7,6 +8,11 @@ class DBHandler:
         self.conn = None
         self.cursor = None
         self.cipher = Fernet(encryption_key)
+
+        db_dir = os.path.dirname(self.db_name)
+        if db_dir and not os.path.exists(db_dir):
+            os.makedirs(db_dir)
+        self.connect_to_db()
 
     def connect_to_db(self):
         try:
@@ -30,6 +36,8 @@ class DBHandler:
             username TEXT PRIMARY KEY,
             password_hash TEXT,
             role TEXT,
+            first_name TEXT,
+            last_name TEXT,
             registration_date DATETIME
         )
         ''')
@@ -54,10 +62,9 @@ class DBHandler:
 
         self.cursor.execute('''
         CREATE TABLE IF NOT EXISTS scooters (
-            scooter_id INTEGER PRIMARY KEY AUTOINCREMENT,
             brand TEXT,
             model TEXT,
-            serial_number TEXT,
+            serial_number TEXT PRIMARY KEY,
             top_speed REAL,
             battery_capacity REAL,
             soc INTEGER,
@@ -135,7 +142,7 @@ class DBHandler:
                 values.append(self.encryptdata(str(val)))
             elif table_name == 'scooters' and col == 'location':
                 values.append(self.encryptdata(str(val)))
-            elif table_name == 'logs' and (col == 'description' or col == 'additional_info'):
+            elif table_name == 'logs' and (col == 'details' or col == 'additional_info'):
                 values.append(self.encryptdata(str(val)))
             else:
                 values.append(val)
@@ -169,7 +176,7 @@ class DBHandler:
                     recorddict[colname] = self.decryptdata(value)
                 elif tablename == 'scooters' and colname == 'location' and value is not None:
                     recorddict[colname] = self.decryptdata(value)
-                elif tablename == 'logs' and (colname == 'description' or colname == 'additional_info') and value is not None:
+                elif tablename == 'logs' and (colname == 'details' or colname == 'additional_info') and value is not None:
                     recorddict[colname] = self.decryptdata(value)
                 else:
                     recorddict[colname] = value
@@ -189,7 +196,7 @@ class DBHandler:
                 values.append(self.encryptdata(str(val)))
             elif tablename == 'scooters' and col == 'location':
                 values.append(self.encryptdata(str(val)))
-            elif tablename == 'logs' and (col == 'description' or col == 'additional_info'):
+            elif tablename == 'logs' and (col == 'details' or col == 'additional_info'):
                 values.append(self.encryptdata(str(val)))
             else:
                 values.append(val)

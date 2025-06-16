@@ -4,14 +4,16 @@ import secrets
 from input_validation import InputValidation
 
 class User:
-    def __init__(self, username, passwordhash, firstname, lastname):
+    def __init__(self, username, passwordhash, role, firstname, lastname, input_validation: InputValidation):
         self.username = username
         self.passwordhash = passwordhash
-        self.firstname = firstname
-        self.lastname = lastname
+        self.role = role
+        self.first_name = firstname
+        self.last_name = lastname
         self.registrationdate = datetime.date.today().isoformat()
         self.isloggedin = False
-
+        self.input_validation = input_validation
+        
     def getmyusername(self):
         return self.username
 
@@ -36,9 +38,11 @@ class User:
         print("User logged out.")
 
     def changemypassword(self, newpassword):
+        if self.role == 'SuperAdministrator':
+            print("SuperAdministrators cannot change their password.")
         currentpasswordinput = input("type your current password to confirm")
         if self.is_valid_password(currentpasswordinput):
-            if InputValidation.is_valid_password(newpassword):
+            if self.input_validation.is_valid_password(newpassword):
                 self.passwordhash = self.makepasswordhash(newpassword)
                 print("Password successfully changed")
                 return True
@@ -54,8 +58,3 @@ class User:
         hasher = hashlib.sha256()
         hasher.update(password.encode('utf-8'))
         return hasher.hexdigest()
-
-    def show_common_menu(self) -> None:
-        print("\n--- Your Menu ---")
-        print("1. Change My Password")
-        print("2. Log Out")

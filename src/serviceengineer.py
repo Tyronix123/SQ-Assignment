@@ -1,23 +1,38 @@
 import datetime
 import hashlib
 import secrets
+import re
+from db_handler import DBHandler
+from logger import Logger
+
 from input_validation import InputValidation
+from input_handler import InputHandler
 from traveller_handler import TravellerHandler
+from user import User
+
 
 class ServiceEngineer(User):
-    def __init__(self, username, password_hash, firstname, lastname, reg_date=None, db_manager=None, logger=None):
-        super().__init__(username, password_hash, firstname, lastname)
-        self.db_manager = db_manager
+    def __init__(self, username, password_hash, role, firstname, lastname, reg_date=None, db_handler: DBHandler = None, logger: Logger = None, input_validation: InputValidation = None, input_handler: InputHandler = None):
+        self.username = username
+        self.passwordhash = password_hash
+        self.role = role
+        self.first_name = firstname
+        self.last_name = lastname
+        self.reg_date = reg_date
+        self.db_handler = db_handler
         self.logger = logger
-        self.traveller_handler = TravellerHandler(db_manager, logger, self.dutch_cities)
+        self.input_validation = input_validation
+        self.input_handler = input_handler
         self.dutch_cities = ["Amsterdam", "Rotterdam", "Utrecht", "The Hague", "Eindhoven",
                              "Groningen", "Maastricht", "Leiden", "Haarlem", "Delft"]
+        self.traveller_handler = TravellerHandler(db_handler, logger, self.dutch_cities)
 
-    def logmyaction(self, description, additional_info="", is_suspicious=False):
+
+    def logmyaction(self, details, additional_info="", is_suspicious=False):
         if self.logger:
-            self.logger.writelog(self.username, description, additional_info, is_suspicious)
+            self.logger.writelog(self.username, details, additional_info, is_suspicious)
         else:
-            print(f"LOG (no logger connected): {description} - {additional_info}")
+            print(f"LOG (no logger connected): {details} - {additional_info}")
 
     def addtraveller(self, travellerinfo):
         self.traveller_handler.add_traveller(travellerinfo, self.username)
@@ -33,14 +48,15 @@ class ServiceEngineer(User):
 
     def updatescooterlimit(self, serialnumber, newinfo):
         print(f"\nUpdating Scooter Info (Limited for Service Engineer) for Serial: {serialnumber}")
-        if not self.db_manager:
+        
+        if not self.db_handler:
             print("Error: Database not connected. Can't update scooter.")
             return
-        existing_scooter = self.db_manager.getdata('scooters', {'serial_number': serialnumber})
+
+        existing_scooter = self.db_handler.getdata('scooters', {'serial_number': serialnumber})
         if not existing_scooter:
             print(f"Error: Scooter with serial number '{serialnumber}' not found.")
-            self.logmyaction("Update Scooter Failed", f"Scooter '{serialnumber}' not found for SE update",
-                             is_suspicious=True)
+            self.logmyaction("Update Scooter Failed", f"Scooter '{serialnumber}' not found for SE update", is_suspicious=True)
             return
 
         allowed_fields = ['state_of_charge', 'location', 'out_of_service_status', 'mileage', 'last_maintenance_date']
@@ -51,68 +67,173 @@ class ServiceEngineer(User):
             if key not in allowed_fields:
                 print(f"Service Engineers are not allowed to change '{key}'. Skipping this field.")
                 self.logmyaction("Update Scooter Failed",
-                                 f"SE tried to change forbidden field '{key}' on '{serialnumber}'", is_suspicious=True)
+                                f"SE tried to change forbidden field '{key}' on '{serialnumber}'", is_suspicious=True)
                 continue
 
-            cleaned_value = InputValidation.clean_up_input(str(value))
+            try:
+                if key == 'state_of_charge':
+                    cleaned = self.input_handler.clean_soc(value)
+                elif key == 'location':
+                    lat = value.get("latitude", 0.0)
+                    lon = value.get("longitude", 0.0)
+                    cleaned = self.input_handler.clean_location(lat, lon)
+                elif key == 'out_of_service_status':
+                    cleaned = self.input_handler.clean_out_of_service(value)
+                elif key == 'mileage':
+                    cleaned = self.input_handler.clean_mileage(value)
+                elif key == 'last_maintenance_date':
+                    cleaned = self.input_handler.clean_last_maintenance_date(value)
+                else:
+                    cleaned = value
 
-            if key == 'location' and not InputValidation.is_valid_location(cleaned_value):
-                print(f"Invalid location format for '{key}': '{cleaned_value}'. Update cancelled.")
-                self.logmyaction("Update Scooter Failed", f"Invalid location for '{serialnumber}' for SE update",
-                                 is_suspicious=True)
-                return
+            except ValueError as ve:
+                print(f"Validation error for '{key}': {ve}. Update cancelled.")
+                self.logmyaction("Update Scooter Failed", f"Invalid value for '{key}' on scooter '{serialnumber}'", is_suspicious=True)
+                continue
 
-            if str(originalvalues.get(key, '')).strip() != cleaned_value.strip():
-                updates_for_db[key] = value
+            if key == 'location':
+                old_loc = originalvalues.get('location', {})
+                if round(old_loc.get('latitude', 0), 5) != cleaned['latitude'] or round(old_loc.get('longitude', 0), 5) != cleaned['longitude']:
+                    updates_for_db[key] = cleaned
+                else:
+                    print(f"'{key}' is the same. No update needed.")
+            elif str(originalvalues.get(key, '')).strip() != str(cleaned).strip():
+                updates_for_db[key] = cleaned
             else:
-                print(f"'{key}' value is the same. No change needed.")
+                print(f"'{key}' is the same. No update needed.")
 
         if not updates_for_db:
-            print("No valid or different information provided for update. Nothing changed.")
+            print("No valid or changed information to update.")
             return
 
         try:
-            self.db_manager.updateexistingrecord('scooters', 'serial_number', serialnumber, updates_for_db)
-            print(f"Scooter with serial number '{serialnumber}' information updated.")
-            self.logmyaction("Update Scooter",
-                             f"Info for scooter '{serialnumber}' updated by Service Engineer (limited).")
+            self.db_handler.updateexistingrecord('scooters', 'serial_number', serialnumber, updates_for_db)
+            print(f"Scooter with serial number '{serialnumber}' successfully updated.")
+            self.logmyaction("Update Scooter", f"Limited update by Service Engineer for scooter '{serialnumber}'.")
         except Exception as e:
-            print(f"Couldn't update scooter '{serialnumber}'. Error: {e}")
-            self.logmyaction("Update Scooter Failed", f"Error: {e}", is_suspicious=True)
+            print(f"Error while updating scooter '{serialnumber}': {e}")
+            self.logmyaction("Update Scooter Failed", f"Database error: {e}", is_suspicious=True)
+
 
     def searchscooter(self, query):
         print(f"\nSearching Scooters for: '{query}'")
-        if not self.db_manager:
+        
+        if not self.db_handler:
             print("Error: Database not connected. Can't search scooters.")
             return []
 
-        all_scooters = self.db_manager.getdata('scooters')
-        results = []
-        cleanedquery = InputValidation.clean_up_input(query).lower()
+        SEARCH_FIELDS = {
+            'serial_number': 'Serial Number',
+            'brand': 'Brand',
+            'model': 'Model',
+        }
 
-        if not cleanedquery:
+        all_scooters = self.db_handler.getdata('scooters')
+        results = []
+
+        if not query:
             print("No search term provided, showing all scooters.")
             results = all_scooters
         else:
             for scooter in all_scooters:
-                if (cleanedquery in scooter.get('serial_number', '').lower() or
-                        cleanedquery in scooter.get('brand', '').lower() or
-                        cleanedquery in scooter.get('model', '').lower()):
-                    results.append(scooter)
+                matched_field = None
+                for field, display_name in SEARCH_FIELDS.items():
+                    field_value = str(scooter.get(field, '')).lower()
+                    if query in field_value:
+                        matched_field = display_name
+                        break
+                
+                if matched_field:
+                    results.append({
+                        'scooter': scooter,
+                        'matched_field': matched_field,
+                        'matched_value': scooter.get(field)
+                    })
 
         if results:
             print(f"Found {len(results)} scooter(s):")
-            for s in results:
+            for result in results:
+                s = result['scooter']
                 print(
-                    f"  Serial: {s.get('serial_number')}, Brand: {s.get('brand')}, Model: {s.get('model')}, SoC: {s.get('state_of_charge')}%, Location: {s.get('location')}")
+                    f"  Serial: {s.get('serial_number')}, Brand: {s.get('brand')}, Model: {s.get('model')}, "
+                    f"SoC: {s.get('soc')}%, Location: {s.get('location')}")
+                print(f"    (Matched on {result['matched_field']}: {result['matched_value']})")
+            
             self.logmyaction("Search Scooter", f"Searched for '{query}', found {len(results)} results.")
         else:
             print("No scooters found matching your search.")
             self.logmyaction("Search Scooter", f"Searched for '{query}', scooter not found.")
         return results
 
-    def show_service_engineer_menu(self):
-        self.show_common_menu()
+    def handle_menu_choice(self, choice):
+        if choice == '3':
+            tinfo = {
+                'first_name': input("Traveller First Name: "),
+                'last_name': input("Traveller Last Name: "),
+                'birthday': input("Traveller Birthday (YYYY-MM-DD): "),
+                'gender': input("Traveller Gender: "),
+                'street_name': input("Traveller Street Name: "),
+                'house_number': input("Traveller House Number: "),
+                'zip_code': input("Traveller Zip Code (DDDDXX): "),
+                'city': input(f"Traveller City (choose from {', '.join(self.dutch_cities)}): "),
+                'email_address': input("Traveller Email Address: "),
+                'mobile_phone': input("Traveller Mobile Phone (8 digits, e.g., 12345678): "),
+                'driving_license_number': input("Traveller Driving License Number (XXDDDDDDD or XDDDDDDDD): ")
+            }
+            if self.input_validation.is_valid_phone(tinfo['mobile_phone']):
+                tinfo['mobile_phone'] = "+31-6-" + tinfo['mobile_phone']
+            self.addtraveller(tinfo)
+        elif choice == '4':
+            custid = input("Enter Traveller Customer ID to update: ")
+            updatedata = {}
+            print("Enter new values (leave empty to skip):")
+            new_email = input("New Email: ")
+            if new_email: updatedata['email_address'] = new_email
+            new_phone = input("New Mobile Phone (8 digits): ")
+            if new_phone:
+                if self.input_validation.is_valid_phone(new_phone):
+                    updatedata['mobile_phone'] = "+31-6-" + new_phone
+                else:
+                    updatedata['mobile_phone'] = new_phone
+            new_zip = input("New Zip Code: ")
+            if new_zip: updatedata['zip_code'] = new_zip
+            new_city = input(f"New City (choose from {', '.join(self.dutch_cities)}): ")
+            if new_city: updatedata['city'] = new_city
+            self.updatetraveller(custid, updatedata)
+        elif choice == '5':
+            custid = input("Enter Traveller Customer ID to delete: ")
+            self.deletetraveller(custid)
+        elif choice == '6':
+            s_query = input("Enter search term for travellers (name, email, ID): ")
+            self.searchtraveller(s_query)
+        elif choice == '7':
+            serial = input("Enter Scooter Serial Number to update: ")
+            updatedata = {}
+            print("Enter new values (leave empty to skip):")
+            new_soc = input("New State of Charge (%): ")
+            if new_soc: updatedata['state_of_charge'] = float(new_soc)
+            new_loc = input("New Location (latitude,longitude): ")
+            if new_loc: updatedata['location'] = new_loc
+            new_oos = input("New Out of Service Status (0/1): ")
+            if new_oos: updatedata['out_of_service_status'] = int(new_oos)
+            new_mileage = input("New Mileage (km): ")
+            if new_mileage: updatedata['mileage'] = float(new_mileage)
+            new_maint_date = input("New Last Maintenance Date (YYYY-MM-DD): ")
+            if new_maint_date: updatedata['last_maintenance_date'] = new_maint_date
+            self.updatescooterlimit(serial, updatedata)
+        elif choice == '8':
+            s_query = input("Enter search term for scooters (serial, brand, model): ")
+            self.searchscooter(s_query)
+        else:
+            print("That's not a valid option. Please try again.")
+
+
+
+
+    def show_menu(self):
+        print("\n--- Your Menu ---")
+        print("1. Change My Password")
+        print("2. Log Out")
         print("Service Engineer Specific")
         print("3. Add New Traveller")
         print("4. Update Traveller Info")

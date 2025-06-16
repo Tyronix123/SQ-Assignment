@@ -1,123 +1,191 @@
 import datetime
 from input_validation import InputValidation
+from input_handler import InputHandler
+from logger import Logger
+from db_handler import DBHandler
 
 class ScooterHandler:
-    def __init__(self, db_manager, logger):
-        self.db_manager = db_manager
+    def __init__(self, db_handler: DBHandler = None, logger: Logger = None, input_validation: InputValidation = None, input_handler: InputHandler = None):
+        self.db_handler = db_handler
         self.logger = logger
+        self.input_validation = input_validation
+        self.input_handler = input_handler
+
+    def logmyaction(self, action, details, is_suspicious=False):
+        if self.logger:
+            self.logger.writelog(action, details, issuspicious=is_suspicious)
+        else:
+            print(f"[LOG] {action}: {details}")
 
     def add_scooter(self, scooter_info, username):
         print("\nAdding a New Scooter")
-        if not self.db_manager:
+        if not self.db_handler:
             print("Error: Database is not connected. Can't add scooter.")
             return
 
-        if not InputValidation.is_valid_serial(scooter_info.get('serial_number', '')):
-            print("Invalid serial number format (10-17 alphanumeric characters).")
-            self.logger.writelog(username, "Add Scooter Failed", "Invalid serial number format", issuspicious=True)
-            return
-            
-        if not InputValidation.is_valid_location(scooter_info.get('location', '')):
-            print("Invalid location format (latitude,longitude with 5 decimal places).")
-            self.logger.writelog(username, "Add Scooter Failed", "Invalid location format", issuspicious=True)
-            return
-            
-        if not InputValidation.is_valid_soc(scooter_info.get('state_of_charge', 0)):
-            print("Invalid state of charge (0-100%).")
-            self.logger.writelog(username, "Add Scooter Failed", "Invalid state of charge", issuspicious=True)
+        try:
+            cleaned_data = self.input_handler.handle_scooter_data(scooter_info)
+        except ValueError as e:
+            print(f"Validation error while cleaning scooter data: {e}")
+            self.logger.writelog(username, "Add Scooter Failed", f"Validation error: {e}", issuspicious=True)
             return
 
-        existing_scooter = self.db_manager.getdata('scooters', {'serial_number': scooter_info['serial_number']})
+        serial_number = cleaned_data.get('serial_number', '')
+
+        existing_scooter = self.db_handler.getdata('scooters', {'serial_number': serial_number})
         if existing_scooter:
-            print(f"Error: Scooter with serial number '{scooter_info['serial_number']}' already exists.")
-            self.logger.writelog(username, "Add Scooter Failed", 
-                               f"Duplicate serial number: {scooter_info['serial_number']}", issuspicious=True)
+            print(f"Error: Scooter with serial number '{serial_number}' already exists.")
+            self.logger.writelog(username, "Add Scooter Failed", f"Duplicate serial number: {serial_number}", issuspicious=True)
             return
 
         scooter_data = {
-            'serial_number': scooter_info.get('serial_number', ''),
-            'brand': scooter_info.get('brand', ''),
-            'model': scooter_info.get('model', ''),
-            'top_speed': scooter_info.get('top_speed', 0),
-            'battery_capacity': scooter_info.get('battery_capacity', 0),
-            'state_of_charge': scooter_info.get('state_of_charge', 0),
-            'target_range_soc': scooter_info.get('target_range_soc', 0),
-            'location': scooter_info.get('location', ''),
-            'out_of_service_status': scooter_info.get('out_of_service_status', 0),
-            'mileage': scooter_info.get('mileage', 0.0),
-            'last_maintenance_date': scooter_info.get('last_maintenance_date', ''),
+            'serial_number': serial_number,
+            'brand': cleaned_data.get('brand', ''),
+            'model': cleaned_data.get('model', ''),
+            'top_speed': cleaned_data.get('top_speed', 0),
+            'battery_capacity': cleaned_data.get('battery_capacity', 0),
+            'state_of_charge': cleaned_data.get('soc', 0),
+            'target_range_soc': cleaned_data.get('target_range_soc', 0),
+            'location': cleaned_data.get('location', {}),
+            'out_of_service_status': cleaned_data.get('out_of_service', 0),
+            'mileage': cleaned_data.get('mileage', 0.0),
+            'last_maintenance_date': cleaned_data.get('last_maintenance_date', ''),
             'in_service_date': datetime.date.today().isoformat()
         }
 
         try:
-            self.db_manager.addnewrecord('scooters', scooter_data)
-            print(f"Scooter '{scooter_data['brand']} {scooter_data['model']}' (Serial: {scooter_data['serial_number']}) added successfully!")
-            self.logger.writelog(username, "Add Scooter", 
-                               f"New scooter added: {scooter_data['serial_number']}")
+            self.db_handler.addnewrecord('scooters', scooter_data)
+            print(f"Scooter '{scooter_data['brand']} {scooter_data['model']}' (Serial: {serial_number}) added successfully!")
+            self.logger.writelog(username, "Add Scooter",
+                                f"New scooter added: {serial_number}")
         except Exception as e:
             print(f"Couldn't add scooter. Error: {e}")
             self.logger.writelog(username, "Add Scooter Failed", f"Error: {e}", issuspicious=True)
 
-    def update_scooter(self, serial_number, new_info, username, is_service_engineer=False):
-        print(f"\nUpdating Scooter Info for Serial: {serial_number}")
-        if not self.db_manager:
+    def updatescooterlimit(self, serialnumber, newinfo):
+        print(f"\nUpdating Scooter Info (Limited for Service Engineer) for Serial: {serialnumber}")
+
+        if not self.db_handler:
             print("Error: Database not connected. Can't update scooter.")
             return
 
-        existing_scooter = self.db_manager.getdata('scooters', {'serial_number': serial_number})
+        existing_scooter = self.db_handler.getdata('scooters', {'serial_number': serialnumber})
         if not existing_scooter:
-            print(f"Error: Scooter with serial number '{serial_number}' not found.")
-            self.logger.writelog(username, "Update Scooter Failed", 
-                               f"Scooter '{serial_number}' not found", issuspicious=True)
+            print(f"Error: Scooter with serial number '{serialnumber}' not found.")
+            self.logmyaction("Update Scooter Failed", f"Scooter '{serialnumber}' not found for SE update", is_suspicious=True)
             return
 
-        # Fields that service engineers can't modify
-        forbidden_fields = ['serial_number', 'brand', 'model', 'top_speed', 'battery_capacity'] if is_service_engineer else []
-        
-        cleaned_info = {}
-        for key, value in new_info.items():
-            if key in forbidden_fields:
-                print(f"Service Engineers are not allowed to change '{key}'. Skipping.")
-                self.logger.writelog(username, "Update Scooter Warning",
-                                   f"Attempt to modify forbidden field '{key}' on scooter '{serial_number}'")
+        allowed_fields = ['state_of_charge', 'location', 'out_of_service_status', 'mileage', 'last_maintenance_date']
+        updates_for_db = {}
+        originalvalues = existing_scooter[0]
+
+        for key, value in newinfo.items():
+            if key not in allowed_fields:
+                print(f"Service Engineers are not allowed to change '{key}'. Skipping this field.")
+                self.logmyaction("Update Scooter Failed",
+                                f"SE tried to change forbidden field '{key}' on '{serialnumber}'", is_suspicious=True)
                 continue
 
-            cleaned_value = InputValidation.clean_up_input(str(value))
-            
-            if key == 'location' and not InputValidation.is_valid_location(cleaned_value):
-                print(f"Invalid location format '{cleaned_value}'. Update cancelled.")
-                self.logger.writelog(username, "Update Scooter Failed",
-                                   f"Invalid location for scooter '{serial_number}'", issuspicious=True)
-                return
-                
-            if key == 'state_of_charge' and not InputValidation.is_valid_soc(cleaned_value):
-                print(f"Invalid state of charge '{cleaned_value}'. Must be 0-100. Update cancelled.")
-                self.logger.writelog(username, "Update Scooter Failed",
-                                   f"Invalid SoC for scooter '{serial_number}'", issuspicious=True)
-                return
-                
-            cleaned_info[key] = cleaned_value
+            try:
+                if key == 'state_of_charge':
+                    cleaned = self.input_handler.clean_soc(value)
+                elif key == 'location':
+                    lat = value.get("latitude", 0.0)
+                    lon = value.get("longitude", 0.0)
+                    cleaned = self.input_handler.clean_location(lat, lon)
+                elif key == 'out_of_service_status':
+                    cleaned = self.input_handler.clean_out_of_service(value)
+                elif key == 'mileage':
+                    cleaned = self.input_handler.clean_mileage(value)
+                elif key == 'last_maintenance_date':
+                    cleaned = self.input_handler.clean_last_maintenance_date(value)
+                else:
+                    cleaned = value
+            except ValueError as ve:
+                print(f"Validation error for '{key}': {ve}. Update cancelled.")
+                self.logmyaction("Update Scooter Failed", f"Invalid value for '{key}' on scooter '{serialnumber}'", is_suspicious=True)
+                continue
 
-        if not cleaned_info:
-            print("No valid information provided for update. Nothing changed.")
+            if key == 'location':
+                old_loc = originalvalues.get('location', {})
+                if round(old_loc.get('latitude', 0), 5) != cleaned['latitude'] or round(old_loc.get('longitude', 0), 5) != cleaned['longitude']:
+                    updates_for_db[key] = cleaned
+                else:
+                    print(f"'{key}' is the same. No update needed.")
+            elif str(originalvalues.get(key, '')).strip() != str(cleaned).strip():
+                updates_for_db[key] = cleaned
+            else:
+                print(f"'{key}' is the same. No update needed.")
+
+        if not updates_for_db:
+            print("No valid or changed information to update.")
             return
 
         try:
-            self.db_manager.updateexistingrecord('scooters', 'serial_number', serial_number, cleaned_info)
-            print(f"Scooter with serial '{serial_number}' updated successfully!")
-            self.logger.writelog(username, "Update Scooter", 
-                               f"Updated scooter '{serial_number}'")
+            self.db_handler.updateexistingrecord('scooters', 'serial_number', serialnumber, updates_for_db)
+            print(f"Scooter with serial number '{serialnumber}' successfully updated.")
+            self.logmyaction("Update Scooter", f"Limited update by Service Engineer for scooter '{serialnumber}'.")
         except Exception as e:
-            print(f"Couldn't update scooter '{serial_number}'. Error: {e}")
-            self.logger.writelog(username, "Update Scooter Failed", f"Error: {e}", issuspicious=True)
+            print(f"Error while updating scooter '{serialnumber}': {e}")
+            self.logmyaction("Update Scooter Failed", f"Database error: {e}", is_suspicious=True)
+
+    def update_scooter(self, serialnumber, newinfo):
+        print(f"\nUpdating Scooter Info for Serial: {serialnumber}")
+
+        if not self.db_handler:
+            print("Error: Database not connected. Can't update scooter.")
+            return
+
+        existing_scooter = self.db_handler.getdata('scooters', {'serial_number': serialnumber})
+        if not existing_scooter:
+            print(f"Error: Scooter with serial number '{serialnumber}' not found.")
+            self.logmyaction("Update Scooter Failed", f"Scooter '{serialnumber}' not found for update", is_suspicious=True)
+            return
+
+        originalvalues = existing_scooter[0]
+
+        try:
+            cleaned_data = self.input_handler.handle_scooter_data(newinfo)
+        except ValueError as ve:
+            print(f"Validation error during cleaning: {ve}. Update cancelled.")
+            self.logmyaction("Update Scooter Failed", f"Validation error for scooter '{serialnumber}': {ve}", is_suspicious=True)
+            return
+
+        updates_for_db = {}
+
+        for key, cleaned_value in cleaned_data.items():
+            if key == 'location':
+                old_loc = originalvalues.get('location', {})
+                if round(old_loc.get('latitude', 0), 5) != cleaned_value['latitude'] or round(old_loc.get('longitude', 0), 5) != cleaned_value['longitude']:
+                    updates_for_db[key] = cleaned_value
+                else:
+                    print(f"'{key}' is the same. No update needed.")
+            else:
+                if str(originalvalues.get(key, '')).strip() != str(cleaned_value).strip():
+                    updates_for_db[key] = cleaned_value
+                else:
+                    print(f"'{key}' is the same. No update needed.")
+
+        if not updates_for_db:
+            print("No valid or changed information to update.")
+            return
+
+        try:
+            self.db_handler.updateexistingrecord('scooters', 'serial_number', serialnumber, updates_for_db)
+            print(f"Scooter with serial number '{serialnumber}' successfully updated.")
+            self.logmyaction("Update Scooter", f"Full update for scooter '{serialnumber}'.")
+        except Exception as e:
+            print(f"Error while updating scooter '{serialnumber}': {e}")
+            self.logmyaction("Update Scooter Failed", f"Database error: {e}", is_suspicious=True)
+
 
     def delete_scooter(self, serial_number, username):
         print(f"\nDeleting Scooter with Serial: {serial_number}")
-        if not self.db_manager:
+        if not self.db_handler:
             print("Error: Database is not connected. Can't delete scooter.")
             return
 
-        existing_scooter = self.db_manager.getdata('scooters', {'serial_number': serial_number})
+        existing_scooter = self.db_handler.getdata('scooters', {'serial_number': serial_number})
         if not existing_scooter:
             print(f"Error: Scooter with serial '{serial_number}' not found.")
             self.logger.writelog(username, "Delete Scooter Failed", 
@@ -133,7 +201,7 @@ class ScooterHandler:
             return
 
         try:
-            self.db_manager.deleterecord('scooters', 'serial_number', serial_number)
+            self.db_handler.deleterecord('scooters', 'serial_number', serial_number)
             print(f"Scooter with serial '{serial_number}' successfully deleted.")
             self.logger.writelog(username, "Delete Scooter", 
                                f"Deleted scooter '{serial_number}'")
@@ -141,49 +209,64 @@ class ScooterHandler:
             print(f"A problem happened while deleting scooter '{serial_number}'. Error: {e}")
             self.logger.writelog(username, "Delete Scooter Failed", f"Error: {e}", issuspicious=True)
 
-    def search_scooter(self, query, username):
+    def search_scooter(self, query):
         print(f"\nSearching Scooters for: '{query}'")
-        if not self.db_manager:
-            print("Error: Database is not ready. Can't search scooters.")
+
+        if not self.db_handler:
+            print("Error: Database not connected. Can't search scooters.")
             return []
 
-        all_scooters = self.db_manager.getdata('scooters')
-        results = []
-        clean_query = InputValidation.clean_up_input(query).lower()
+        SEARCH_FIELDS = {
+            'serial_number': 'Serial Number',
+            'brand': 'Brand',
+            'model': 'Model',
+        }
 
-        if not clean_query:
+        all_scooters = self.db_handler.getdata('scooters')
+        results = []
+
+        if not query:
             print("No search term provided, showing all scooters.")
             results = all_scooters
         else:
+            query = query.lower()
             for scooter in all_scooters:
-                if (clean_query in scooter.get('serial_number', '').lower() or
-                    clean_query in scooter.get('brand', '').lower() or
-                    clean_query in scooter.get('model', '').lower() or
-                    clean_query in scooter.get('location', '').lower()):
-                    results.append(scooter)
+                matched_field = None
+                for field, display_name in SEARCH_FIELDS.items():
+                    field_value = str(scooter.get(field, '')).lower()
+                    if query in field_value:
+                        matched_field = display_name
+                        break
+
+                if matched_field:
+                    results.append({
+                        'scooter': scooter,
+                        'matched_field': matched_field,
+                        'matched_value': scooter.get(field)
+                    })
 
         if results:
             print(f"Found {len(results)} scooter(s):")
-            for s in results:
-                status = "Out of Service" if s.get('out_of_service_status', 0) == 1 else "Available"
+            for result in results:
+                s = result['scooter']
                 print(
-                    f"  Serial: {s.get('serial_number')}, Brand/Model: {s.get('brand')} {s.get('model')}, "
-                    f"SoC: {s.get('state_of_charge')}%, Location: {s.get('location')}, Status: {status}")
-            self.logger.writelog(username, "Search Scooter", 
-                               f"Searched for '{query}', found {len(results)} results.")
+                    f"  Serial: {s.get('serial_number')}, Brand: {s.get('brand')}, Model: {s.get('model')}, "
+                    f"SoC: {s.get('soc')}%, Location: {s.get('location')}")
+                print(f"    (Matched on {result['matched_field']}: {result['matched_value']})")
+
+            self.logmyaction("Search Scooter", f"Searched for '{query}', found {len(results)} results.")
         else:
             print("No scooters found matching your search.")
-            self.logger.writelog(username, "Search Scooter", 
-                               f"Searched for '{query}', found no results.")
+            self.logmyaction("Search Scooter", f"Searched for '{query}', scooter not found.")
         return results
 
     def mark_scooter_out_of_service(self, serial_number, username, reason=""):
         print(f"\nMarking Scooter {serial_number} as Out of Service")
-        if not self.db_manager:
+        if not self.db_handler:
             print("Error: Database is not connected.")
             return
 
-        existing_scooter = self.db_manager.getdata('scooters', {'serial_number': serial_number})
+        existing_scooter = self.db_handler.getdata('scooters', {'serial_number': serial_number})
         if not existing_scooter:
             print(f"Error: Scooter with serial '{serial_number}' not found.")
             self.logger.writelog(username, "Scooter OOS Failed", 
@@ -191,7 +274,7 @@ class ScooterHandler:
             return
 
         try:
-            self.db_manager.updateexistingrecord('scooters', 'serial_number', serial_number, {
+            self.db_handler.updateexistingrecord('scooters', 'serial_number', serial_number, {
                 'out_of_service_status': 1,
                 'last_maintenance_date': datetime.date.today().isoformat()
             })
@@ -204,11 +287,11 @@ class ScooterHandler:
 
     def mark_scooter_in_service(self, serial_number, username):
         print(f"\nMarking Scooter {serial_number} as In Service")
-        if not self.db_manager:
+        if not self.db_handler:
             print("Error: Database is not connected.")
             return
 
-        existing_scooter = self.db_manager.getdata('scooters', {'serial_number': serial_number})
+        existing_scooter = self.db_handler.getdata('scooters', {'serial_number': serial_number})
         if not existing_scooter:
             print(f"Error: Scooter with serial '{serial_number}' not found.")
             self.logger.writelog(username, "Scooter IS Failed", 
@@ -216,7 +299,7 @@ class ScooterHandler:
             return
 
         try:
-            self.db_manager.updateexistingrecord('scooters', 'serial_number', serial_number, {
+            self.db_handler.updateexistingrecord('scooters', 'serial_number', serial_number, {
                 'out_of_service_status': 0,
                 'last_maintenance_date': datetime.date.today().isoformat()
             })

@@ -1,25 +1,23 @@
 import datetime
 
 class Logger:
-    @staticmethod
-    def __init__(self, db_manager):
-        self.db_manager = db_manager
+    def __init__(self, db_handler):
+        self.db_handler = db_handler
         self.unseensuspiciouslogs = []
 
-    @staticmethod
     def writelog(self, username, whathappened, extradetails="", issuspicious=False):
-        if not self.db_manager:
+        if not self.db_handler:
             print("Logger cant write, no database connection.")
             return
 
         currenttime = datetime.datetime.now().isoformat()
         try:
-            self.db_manager.addnewrecord(
+            self.db_handler.addnewrecord(
                 'logs',
                 {
-                    'timestamp': currenttime,
+                    'time': currenttime,
                     'username': username,
-                    'description': whathappened,
+                    'details': whathappened,
                     'additional_info': extradetails,
                     'suspicious': 1 if issuspicious else 0
                 }
@@ -31,14 +29,12 @@ class Logger:
         except Exception as e:
             print(f"couldn't write log. Error: {e}")
    
-    @staticmethod
     def getlogs(self):
-        if not self.db_manager:
+        if not self.db_handler:
             print("Cant get logs.")
             return []
-        return self.db_manager.getdata('logs')
+        return self.db_handler.getdata('logs')
 
-    @staticmethod
     def show_logs_to_admin(self) -> None:
         alllogs = self.getlogs()
         if not alllogs:
@@ -49,7 +45,7 @@ class Logger:
         for logentry in alllogs:
             suspicioustag = "[SUSPICIOUS] " if logentry.get('suspicious') == 1 else ""
             print(
-                f"[{logentry.get('timestamp')}] {suspicioustag}{logentry.get('username')}: {logentry.get('description')} ({logentry.get('additional_info')})")
+                f"[{logentry.get('time')}] {suspicioustag}{logentry.get('username')}: {logentry.get('details')} ({logentry.get('additional_info')})")
 
         if self.unseensuspiciouslogs:
             print("\nAll suspicious alerts have been seen by an admin.")
