@@ -14,6 +14,8 @@ from input_validation import InputValidation
 from superadmin import SuperAdministrator
 from systemadmin import SystemAdministrator
 from serviceengineer import ServiceEngineer
+from traveller_handler import TravellerHandler
+from scooter_handler import ScooterHandler
 
 try:
     with open("encryption.key", "rb") as key_file:
@@ -35,6 +37,9 @@ class UmMembers:
         self.logger = Logger(self.db_handler)
         self.input_validation = InputValidation(valid_roles, valid_cities)
         self.input_handler = InputHandler(self.input_validation, valid_cities)
+        self.traveller_handler = TravellerHandler(self.db_handler, self.logger, self.input_validation, self.input_handler)
+        self.scooter_handler = ScooterHandler(self.db_handler, self.logger, self.input_validation, self.input_handler)
+        self.valid_cities = valid_cities
         self.loggedinuser = None
 
     def setupapp(self):
@@ -85,11 +90,11 @@ class UmMembers:
 
             loggedinuser = userlog[0]
             if loggedinuser['role'] == 'SuperAdministrator':
-                current_user = SuperAdministrator(loggedinuser['username'], loggedinuser['password_hash'], loggedinuser['role'], None, None, loggedinuser['registration_date'], self.db_handler, self.logger, self.input_validation, self.input_handler)
+                current_user = SuperAdministrator(self.valid_cities, loggedinuser['username'], loggedinuser['password_hash'], loggedinuser['role'], None, None, loggedinuser['registration_date'], self.db_handler, self.logger, self.input_validation, self.input_handler, self.traveller_handler, self.scooter_handler)
             elif loggedinuser['role'] == 'SystemAdministrator':
-                current_user = SystemAdministrator(loggedinuser['username'], loggedinuser['password_hash'], loggedinuser['role'], loggedinuser['first_name'], loggedinuser['last_name'], loggedinuser['registration_date'], self.db_handler, self.logger, self.input_validation, self.input_handler)
+                current_user = SystemAdministrator(self.valid_cities, loggedinuser['username'], loggedinuser['password_hash'], loggedinuser['role'], loggedinuser['first_name'], loggedinuser['last_name'], loggedinuser['registration_date'], self.db_handler, self.logger, self.input_validation, self.input_handler, self.traveller_handler, self.scooter_handler)
             elif loggedinuser['role'] == 'ServiceEngineer':
-                current_user = ServiceEngineer(loggedinuser['username'], loggedinuser['password_hash'], loggedinuser['role'], loggedinuser['first_name'], loggedinuser['last_name'], loggedinuser['registration_date'], self.db_handler, self.logger, self.input_validation, self.input_handler)
+                current_user = ServiceEngineer(self.valid_cities, loggedinuser['username'], loggedinuser['password_hash'], loggedinuser['role'], loggedinuser['first_name'], loggedinuser['last_name'], loggedinuser['registration_date'], self.db_handler, self.logger, self.input_validation, self.input_handler, self.traveller_handler, self.scooter_handler)
             else:
                 print(f"Error: role '{loggedinuser['role']}' is not recognized. Contact an administrator.")
                 self.logger.writelog("LOGIN_ATTEMPT", f"Blocked login for user '{usernameinput}' with unknown role '{loggedinuser['role']}'", issuspicious=True)
@@ -123,7 +128,7 @@ class UmMembers:
                 self.logger.writelog(self.loggedinuser.getmyusername(), "User logged out.", issuspicious=False)
                 break
             else:
-                self.loggedinuser.handle_menu_choice(choice, self.logger)
+                self.loggedinuser.handle_menu_choice(choice)
 
 if __name__ == "__main__":
     app = UmMembers()

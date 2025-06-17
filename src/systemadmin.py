@@ -4,9 +4,14 @@ from input_validation import InputValidation
 from db_handler import DBHandler
 from logger import Logger
 from input_handler import InputHandler
+from traveller_handler import TravellerHandler
+from scooter_handler import ScooterHandler
 
 class SystemAdministrator(SuperAdministrator):
-    def __init__(self, username, password_hash, role, firstname, lastname, reg_date=None, db_handler: DBHandler = None, logger: Logger = None, input_validation: InputValidation = None, input_handler: InputHandler = None):
+    def __init__(self, dutch_cities, username, password_hash, role, firstname, lastname, reg_date=None, 
+                 db_handler: DBHandler = None, logger: Logger = None, input_validation: InputValidation = None, input_handler: InputHandler = None,
+                 traveller_handler: TravellerHandler = None, scooter_handler: ScooterHandler = None):
+        self.dutch_cities = dutch_cities
         self.username = username
         self.passwordhash = password_hash
         self.role = role
@@ -17,25 +22,13 @@ class SystemAdministrator(SuperAdministrator):
         self.logger = logger
         self.input_validation = input_validation
         self.input_handler = input_handler
+        self.traveller_handler = traveller_handler
+        self.scooter_handler = scooter_handler
+
+        # SystemAdministrator inherit van SuperAdministrator dus alle methods worden overgenomen van die class
 
 
-    def addserviceengineer(self, username, password, firstname, lastname):
-        if self._manage_user_account(username, password, firstname, lastname, "Service Engineer", "Creating a New Service Engineer"):
-            if self._create_user_record(username, password, firstname, lastname, "ServiceEngineer"):
-                print("Service Engineer was successfully added")
-                self.logger.writelog(self.username, "Added Service Engineer", f"New Service Engineer '{username}' created.")
-
-    def updateserviceengineerinfo(self, usernametochange, new_info):
-        self._update_user_info(usernametochange, new_info, "ServiceEngineer")
-
-    def deleteserviceengineer(self, usernametodelete):
-        self._delete_user(usernametodelete, "ServiceEngineer", "ERROR: System admin cant be deleted using this function.")
-
-    def resetengineerpassword(self, usernamereset, newpassword):
-        self._reset_password(usernamereset, newpassword, "ServiceEngineer")
-
-
-    def handle_menu_choice(self, choice, logger):
+    def handle_menu_choice(self, choice):
         if choice == '3':
             u = input("New Service Engineer Username: ")
             p = input("New Service Engineer Password: ")
@@ -67,9 +60,9 @@ class SystemAdministrator(SuperAdministrator):
                 'house_number': input("Traveller House Number: "),
                 'zip_code': input("Traveller Zip Code (DDDDXX): "),
                 'city': input(f"Traveller City (choose from {', '.join(self.dutch_cities)}): "),
-                'email_address': input("Traveller Email Address: "),
+                'email': input("Traveller Email Address: "),
                 'mobile_phone': input("Traveller Mobile Phone (8 digits, e.g., 12345678): "),
-                'driving_license_number': input("Traveller Driving License Number (XXDDDDDDD or XDDDDDDDD): ")
+                'driving_license': input("Traveller Driving License Number (XXDDDDDDD or XDDDDDDDD): ")
             }
             if self.input_validation.is_valid_phone(tinfo['mobile_phone']):
                 tinfo['mobile_phone'] = "+31-6-" + tinfo['mobile_phone']
@@ -79,7 +72,7 @@ class SystemAdministrator(SuperAdministrator):
             updatedata = {}
             print("Enter new values (leave empty to skip):")
             new_email = input("New Email: ")
-            if new_email: updatedata['email_address'] = new_email
+            if new_email: updatedata['email'] = new_email
             new_phone = input("New Mobile Phone (8 digits): ")
             if new_phone:
                 if self.input_validation.is_valid_phone(new_phone):

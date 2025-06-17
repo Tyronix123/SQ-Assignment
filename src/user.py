@@ -3,6 +3,7 @@ import hashlib
 import secrets
 from input_validation import InputValidation
 
+#Soort van abstract class voor SuperAdmin, SystemAdmin en ServiceEngineer
 class User:
     def __init__(self, username, passwordhash, role, firstname, lastname, input_validation: InputValidation):
         self.username = username

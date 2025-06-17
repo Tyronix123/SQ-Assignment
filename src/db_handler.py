@@ -138,15 +138,24 @@ class DBHandler:
 
         for col, val in data_info.items():
             columns.append(col)
-            if table_name == 'travellers' and col == 'mobile_phone':
+            
+            if table_name == 'users' and col == 'username':
                 values.append(self.encryptdata(str(val)))
+
+            elif table_name == 'travellers' and col in ['mobile_phone', 'street_name', 'house_number', 'zip_code', 'city']:
+                values.append(self.encryptdata(str(val)))
+            
             elif table_name == 'scooters' and col == 'location':
                 values.append(self.encryptdata(str(val)))
-            elif table_name == 'logs' and (col == 'activity' or col == 'details'):
+            
+            elif table_name == 'logs' and col in ['activity', 'details']:
                 values.append(self.encryptdata(str(val)))
+
             else:
                 values.append(val)
+
             question_marks.append('?')
+
 
         query = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({', '.join(question_marks)})"
         self.runquery(query, tuple(values))

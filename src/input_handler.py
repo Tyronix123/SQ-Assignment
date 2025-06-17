@@ -66,7 +66,7 @@ class InputHandler:
 
     def clean_city(self, value: str) -> str:
         v = value.strip()
-        if not self.input_validation.is_valid_city(v, self.valid_cities):
+        if not self.input_validation.is_valid_city(v):
             raise ValueError("Invalid city.")
         return v.title()
 
@@ -90,13 +90,13 @@ class InputHandler:
 
     def clean_brand(self, value: str) -> str:
         v = value.strip()
-        if not self.input_validation.is_valid_scooter_brand(v):
+        if not self.input_validation.is_valid_brand(v):
             raise ValueError("Invalid scooter brand.")
         return v.title()
 
     def clean_model(self, value: str) -> str:
         v = value.strip()
-        if not self.input_validation.is_valid_scooter_model(v):
+        if not self.input_validation.is_valid_model(v):
             raise ValueError("Invalid scooter model.")
         return v
 
@@ -158,9 +158,9 @@ class InputHandler:
             "house_number":           self.clean_house_number(data.get("house_number", "")),
             "zip_code":               self.clean_zip(data.get("zip_code", "")),
             "city":                   self.clean_city(data.get("city", "")),
-            "email_address":          self.clean_email(data.get("email_address", "")),
+            "email":          self.clean_email(data.get("email", "")),
             "mobile_phone":           self.clean_phone(data.get("mobile_phone", "")),
-            "driving_license_number": self.clean_license(data.get("driving_license_number", "")),
+            "driving_license": self.clean_license(data.get("driving_license", "")),
         }
     
     def handle_scooter_data(self, data: dict) -> dict:

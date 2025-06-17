@@ -39,7 +39,7 @@ class InputValidation:
         return re.fullmatch(r"^\d{8}$", phone) is not None
 
     def is_valid_license(self, license_number):
-        return re.fullmatch(r"[A-Z]{1,2}\d{7}", license_number) is not None
+        return re.fullmatch(r"(?:[A-Z]{2}\d{7}|[A-Z]{1}\d{8})", license_number) is not None
 
     def is_valid_username(self, username: str) -> bool:
         if not isinstance(username, str): return False

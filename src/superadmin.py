@@ -12,21 +12,22 @@ from logger import Logger
 from db_handler import DBHandler
 
 class SuperAdministrator(User):
-    def __init__(self, username, password_hash, role, firstname, lastname, regdate=None, db_handler: DBHandler = None, logger: Logger = None, input_validation: InputValidation = None, input_handler: InputHandler = None):
+    def __init__(self, dutch_cities, username, password_hash, role, firstname, lastname, reg_date=None, 
+                 db_handler: DBHandler = None, logger: Logger = None, input_validation: InputValidation = None, input_handler: InputHandler = None,
+                 traveller_handler: TravellerHandler = None, scooter_handler: ScooterHandler = None):
+        self.dutch_cities = dutch_cities
         self.username = username
         self.passwordhash = password_hash
         self.role = role
         self.first_name = firstname
         self.last_name = lastname
-        self.reg_date = regdate
+        self.reg_date = reg_date
         self.db_handler = db_handler
         self.logger = logger
-        self.dutch_cities = ["Amsterdam", "Rotterdam", "Utrecht", "The Hague", "Eindhoven",
-                            "Groningen", "Maastricht", "Leiden", "Haarlem", "Delft"]
-        self.traveller_handler = TravellerHandler(db_handler, logger, self.dutch_cities)
-        self.scooter_handler = ScooterHandler(db_handler, logger)
         self.input_validation = input_validation
         self.input_handler = input_handler
+        self.traveller_handler = traveller_handler
+        self.scooter_handler = scooter_handler
 
     def _manage_user_account(self, username, password, firstname, lastname, role, action_details):
         print(f"\n{action_details}")
@@ -84,41 +85,59 @@ class SuperAdministrator(User):
             self.logger.writelog(self.username, f"Add {role} Failed", f"Error: {e}", issuspicious=True)
             return False
         
-    def _update_user_info(self, usernametochange, newinfo: dict, role):
+    def _update_user_info(self, usernametochange: str, newinfo: dict, role: str) -> bool:
         print(f"\n-- Changing {role} Details for: {usernametochange} --")
+
         if not self.db_handler:
-            print("Error: Database not connected. Can't update admin.")
+            print("Error: Database not connected. Can't update user.")
             return False
 
-        adminrecords = self.db_handler.getdata('users', {'username': usernametochange})
-        if not adminrecords or adminrecords[0].get('role') != role:
-            print(f"Error: {role} '{usernametochange}' not found or isn't a {role}.")
+        user_records = self.db_handler.getdata('users', {'username': usernametochange})
+        if not user_records or user_records[0].get('role') != role:
+            print(f"Error: {role} '{usernametochange}' not found or wrong role.")
             self.logger.writelog(self.username, f"Update {role} Failed",
-                        f"Target '{usernametochange}' not found or wrong role", issuspicious=True)
+                                f"Target '{usernametochange}' not found or wrong role", issuspicious=True)
             return False
 
-        cleanedinfo = self.input_handler.handle_user_data(newinfo.items())
+        cleaned = {}
+        try:
+            if 'first_name' in newinfo:
+                cleaned['first_name'] = self.input_handler.clean_first_name(newinfo['first_name'])
+            if 'last_name' in newinfo:
+                cleaned['last_name'] = self.input_handler.clean_last_name(newinfo['last_name'])
+            if 'username' in newinfo:
+                new_username = self.input_handler.clean_username(newinfo['username'])
 
-        if 'role' in cleanedinfo:
-            print("Security Alert! Tried to change user role. That's not allowed here.")
-            del cleanedinfo['role']
-            self.logger.writelog(self.username, f"Update {role} Failed", f"Attempted role change for '{usernametochange}'",
-                        issuspicious=True)
+                if new_username != usernametochange:
+                    if self.db_handler.getdata('users', {'username': new_username}):
+                        print(f"Error: Username '{new_username}' already exists.")
+                        self.logger.writelog(self.username, f"Update {role} Failed",
+                                            f"Attempted to set duplicate username '{new_username}'", issuspicious=True)
+                        return False
+                    cleaned['username'] = new_username
 
-        if not cleanedinfo:
-            print("No new information was provided to update. Nothing changed.")
+        except ValueError as ve:
+            print(f"Validation error: {ve}. Update cancelled.")
+            self.logger.writelog(self.username, f"Update {role} Failed",
+                                f"Validation error for '{usernametochange}': {ve}", issuspicious=True)
+            return False
+
+        if not cleaned:
+            print("No valid info provided to update. Nothing changed.")
             return False
 
         try:
-            self.db_handler.updateexistingrecord('users', 'username', usernametochange, cleanedinfo)
+            self.db_handler.updateexistingrecord('users', 'username', usernametochange, cleaned)
             print(f"{role} '{usernametochange}' updated successfully!")
-            self.logger.writelog(self.username, f"Update {role}", f"Details for '{usernametochange}' updated.")
+            self.logger.writelog(self.username, f"Update {role}",
+                                f"Details updated for '{usernametochange}'")
             return True
         except Exception as e:
             print(f"Couldn't update {role} '{usernametochange}'. Error: {e}")
-            self.logger.writelog(self.username, f"Update {role} Failed", f"Error updating '{usernametochange}': {e}",
-                        issuspicious=True)
+            self.logger.writelog(self.username, f"Update {role} Failed",
+                                f"Error updating '{usernametochange}': {e}", issuspicious=True)
             return False
+
 
     def _delete_user(self, username_to_delete, role, self_deletion_message):
         print(f"\n--- Deleting {role}: {username_to_delete} ---")
@@ -128,8 +147,7 @@ class SuperAdministrator(User):
 
         if username_to_delete == self.username:
             print(self_deletion_message)
-            self.logger.writelog(self.username, f"Delete {role} Failed", f"Tried to delete self ({username_to_delete})",
-                           issuspicious=True)
+            self.logger.writelog(self.username, f"Delete {role} Failed", f"Tried to delete self ({username_to_delete})", issuspicious=True)
             return False
 
         target_admin_records = self.db_handler.getdata('users', {'username': username_to_delete})
@@ -220,7 +238,9 @@ class SuperAdministrator(User):
 
         restore_code = secrets.token_urlsafe(16)
         backup_id = secrets.token_hex(8)
+        # backup_file_name = f"backup_{backup_id}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.zip"
         expiry_date = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
+
 
         try:
             self.db_handler.addnewrecord(
@@ -229,17 +249,16 @@ class SuperAdministrator(User):
                     'code': restore_code,
                     'backup_id': backup_id,
                     'backup_file_name': None,
-                    'created_by_admin': self.username,
-                    'system_admin_username': sysadminusername,
+                    'created_by': self.username,
+                    'for_user': sysadminusername,
                     'expiry_date': expiry_date,
-                    'is_revoked': 0
+                    'used': 0
                 }
             )
             print(f"Successfully generated a restore code for '{sysadminusername}'.")
             print(f"IMPORTANT! Restore Code: {restore_code}. This code is valid until: {expiry_date}.Backup ID (for this code): {backup_id}")
             print("Give this code is a one time use only.")
-            self.logger.writelog(self.username, "Generate Restore Code",
-                           f"Generated code for '{sysadminusername}', backup ID: {backup_id}")
+            self.logger.writelog(self.username, "Generate Restore Code", f"Generated code for '{sysadminusername}', backup ID: {backup_id}")
             return restore_code
         except Exception as e:
             print(f"Couldn't generate restore code. Error: {e}")
@@ -445,6 +464,21 @@ class SuperAdministrator(User):
     def mark_scooter_in_service(self, serial_number):
         self.scooter_handler.mark_scooter_in_service(serial_number, self.username)
 
+    def addserviceengineer(self, username, password, firstname, lastname):
+        if self._manage_user_account(username, password, firstname, lastname, "Service Engineer", "Creating a New Service Engineer"):
+            if self._create_user_record(username, password, firstname, lastname, "ServiceEngineer"):
+                print("Service Engineer was successfully added")
+                self.logger.writelog(self.username, "Added Service Engineer", f"New Service Engineer '{username}' created.")
+
+    def updateserviceengineerinfo(self, usernametochange, new_info):
+        self._update_user_info(usernametochange, new_info, "ServiceEngineer")
+
+    def deleteserviceengineer(self, usernametodelete):
+        self._delete_user(usernametodelete, "ServiceEngineer", "ERROR: System admin cant be deleted using this function.")
+
+    def resetengineerpassword(self, usernamereset, newpassword):
+        self._reset_password(usernamereset, newpassword, "ServiceEngineer")
+
     def viewlogs(self):
         if self.logger:
             self.logger.show_logs_to_admin()
@@ -467,132 +501,184 @@ class SuperAdministrator(User):
             print(f"Username: {user.get('username')}, Role: {user.get('role')}")
         self.logger.writelog(self.username, "View Users", "Viewed all system users and roles.")
 
-    def handle_menu_choice(self, choice, logger):
+    def handle_menu_choice(self, choice):
         if choice == '3':
             u = input("New System Admin Username: ")
             p = input("New System Admin Password: ")
             f = input("New System Admin First Name: ")
             l = input("New System Admin Last Name: ")
             self.addsystemadmin(u, p, f, l)
+
         elif choice == '4':
             u = input("Username of System Admin to update: ")
+            new_u = input("New Username (leave empty to skip): ")
             new_f = input("New First Name (leave empty to skip): ")
             new_l = input("New Last Name (leave empty to skip): ")
-            updatedata = {}
-            if new_f: updatedata['first_name'] = new_f
-            if new_l: updatedata['last_name'] = new_l
-            self.changesystemadmininfo(u, updatedata)
+            
+            data = {}
+            if new_u: data['username'] = new_u
+            if new_f: data['first_name'] = new_f
+            if new_l: data['last_name'] = new_l
+
+            self.changesystemadmininfo(u, data)
+
         elif choice == '5':
             u = input("Username of System Admin to delete: ")
             self.deletesystemadmin(u)
+
         elif choice == '6':
             u = input("Username of System Admin to reset password: ")
             new_p = input("New password for System Admin: ")
             self.resetpasswordsysadmin(u, new_p)
+
         elif choice == '7':
-            sa_user = input("Enter System Administrator username for restore code: ")
-            self.createrestorecode(sa_user)
+            sa = input("Enter System Admin username for restore code: ")
+            self.createrestorecode(sa)
+
         elif choice == '8':
-            code_to_revoke = input("Enter restore code to revoke: ")
-            self.revokerestorecode(code_to_revoke)
+            code = input("Enter restore code to revoke: ")
+            self.revokerestorecode(code)
+
         elif choice == '9':
-            self.viewlogs()
+            u = input("New Service Engineer Username: ")
+            p = input("New Service Engineer Password: ")
+            f = input("New Service Engineer First Name: ")
+            l = input("New Service Engineer Last Name: ")
+            self.addserviceengineer(u, p, f, l)
+
         elif choice == '10':
+            u = input("Username of Service Engineer to update: ")
+            nf = input("New First Name (leave empty to skip): ")
+            nl = input("New Last Name (leave empty to skip): ")
+            data = {}
+            if nf: data['first_name'] = nf
+            if nl: data['last_name'] = nl
+            self.updateserviceengineerinfo(u, data)
+
+        elif choice == '11':
+            u = input("Username of Service Engineer to delete: ")
+            self.deleteserviceengineer(u)
+
+        elif choice == '12':
+            u = input("Username of Service Engineer to reset password: ")
+            np = input("New password for Service Engineer: ")
+            self.resetengineerpassword(u, np)
+
+        elif choice == '13':
+            self.viewlogs()
+
+        elif choice == '14':
+            code = self.createrestorecode('superadmin')
+            self.makebackup(code)
+
+        elif choice == '15':
+            rc = input("Enter restore code: ")
+            bid = input("Enter backup ID: ")
+            self.restoresystembackup(rc, bid)
+
+        elif choice == '16':
             tinfo = {
                 'first_name': input("Traveller First Name: "),
-                'last_name': input("Traveller Last Name: "),
-                'birthday': input("Traveller Birthday (YYYY-MM-DD): "),
-                'gender': input("Traveller Gender: "),
-                'street_name': input("Traveller Street Name: "),
-                'house_number': input("Traveller House Number: "),
-                'zip_code': input("Traveller Zip Code (DDDDXX): "),
-                'city': input(f"Traveller City (choose from {', '.join(self.dutch_cities)}): "),
-                'email_address': input("Traveller Email Address: "),
-                'mobile_phone': input("Traveller Mobile Phone (8 digits, e.g., 12345678): "),
-                'driving_license_number': input("Traveller Driving License Number (XXDDDDDDD or XDDDDDDDD): ")
+                'last_name':  input("Traveller Last Name: "),
+                'birthday':   input("Traveller Birthday (YYYY-MM-DD): "),
+                'gender':     input("Traveller Gender: "),
+                'street_name':input("Traveller Street Name: "),
+                'house_number':input("Traveller House Number: "),
+                'zip_code':   input("Traveller Zip Code (DDDDXX): "),
+                'city':       input(f"Traveller City (choose from {', '.join(self.dutch_cities)}): "),
+                'email':      input("Traveller Email Address: "),
+                'mobile_phone': input("Traveller Mobile Phone (8 digits): "),
+                'driving_license': input("Driving License Number (XXDDDDDDD or XDDDDDDDD): ")
             }
-            if self.input_validation.is_valid_phone(tinfo['mobile_phone']):
-                tinfo['mobile_phone'] = "+31-6-" + tinfo['mobile_phone']
-
             self.addtraveller(tinfo)
-        elif choice == '11':
-            custid = input("Enter Traveller Customer ID to update: ")
-            updatedata = {}
+
+        elif choice == '17':
+            cid = input("Traveller ID to update: ")
+            data = {}
             print("Enter new values (leave empty to skip):")
-            new_email = input("New Email: ")
-            if new_email: updatedata['email_address'] = new_email
-            new_phone = input("New Mobile Phone (8 digits): ")
-            if new_phone:
-                if self.input_validation.is_valid_phone(new_phone):
-                    updatedata['mobile_phone'] = "+31-6-" + new_phone
-                else:
-                    updatedata['mobile_phone'] = new_phone
-            new_zip = input("New Zip Code: ")
-            if new_zip: updatedata['zip_code'] = new_zip
-            new_city = input(f"New City (choose from {', '.join(self.dutch_cities)}): ")
-            if new_city: updatedata['city'] = new_city
-            self.updatetraveller(custid, updatedata)
-        elif choice == '12':
-            custid = input("Enter Traveller Customer ID to delete: ")
-            self.deletetraveller(custid)
-        elif choice == '13':
-            s_info = {
+            em = input("New Email: ")
+            if em: data['email'] = em
+            ph = input("New Mobile Phone (8 digits): ")
+            if ph:
+                data['mobile_phone'] = "+31-6-" + ph if self.input_validation.is_valid_phone(ph) else ph
+            zp = input("New Zip Code: ")
+            if zp: data['zip_code'] = zp
+            ct = input(f"New City (choose from {', '.join(self.dutch_cities)}): ")
+            if ct: data['city'] = ct
+            self.updatetraveller(cid, data)
+
+        elif choice == '18':
+            cid = input("Traveller ID to delete: ")
+            self.deletetraveller(cid)
+
+        elif choice == '19':
+            sinfo = {
                 'serial_number': input("Scooter Serial Number (10-17 alphanumeric): "),
                 'brand': input("Scooter Brand: "),
                 'model': input("Scooter Model: "),
-                'top_speed': float(input("Scooter Top Speed (km/h): ")),
-                'battery_capacity': float(input("Scooter Battery Capacity (Wh): ")),
-                'state_of_charge': float(input("Scooter State of Charge (%): ")),
-                'target_range_soc': float(input("Scooter Target Range SoC (%): ")),
-                'location': input("Scooter Location (latitude,longitude with 5 decimals, e.g., 51.92250,4.47917): "),
-                'out_of_service_status': int(input("Scooter Out of Service (0 for No, 1 for Yes): ")),
-                'mileage': float(input("Scooter Mileage (km): ")),
-                'last_maintenance_date': input("Scooter Last Maintenance Date (YYYY-MM-DD): ")
+                'top_speed': float(input("Top Speed (km/h): ")),
+                'battery_capacity': float(input("Battery Capacity (Wh): ")),
+                'state_of_charge': float(input("State of Charge (%): ")),
+                'target_range_soc': float(input("Target Range SoC (%): ")),
+                'location': input("Location (lat,long 5 dec): "),
+                'out_of_service_status': int(input("Out of Service (0/1): ")),
+                'mileage': float(input("Mileage (km): ")),
+                'last_maintenance_date': input("Last Maintenance (YYYY-MM-DD): ")
             }
-            self.addscooter(s_info)
-        elif choice == '14':
-            serial = input("Enter Scooter Serial Number to update: ")
-            updatedata = {}
+            self.addscooter(sinfo)
+
+        elif choice == '20':
+            sn = input("Scooter Serial Number to update: ")
+            data = {}
             print("Enter new values (leave empty to skip):")
-            new_soc = input("New State of Charge (%): ")
-            if new_soc: updatedata['state_of_charge'] = float(new_soc)
-            new_loc = input("New Location (latitude,longitude): ")
-            if new_loc: updatedata['location'] = new_loc
-            new_oos = input("New Out of Service Status (0/1): ")
-            if new_oos: updatedata['out_of_service_status'] = int(new_oos)
-            new_mileage = input("New Mileage (km): ")
-            if new_mileage: updatedata['mileage'] = float(new_mileage)
-            new_maint_date = input("New Last Maintenance Date (YYYY-MM-DD): ")
-            if new_maint_date: updatedata['last_maintenance_date'] = new_maint_date
-            self.updatescooter(serial, updatedata, serviceengineer=False)
-        elif choice == '15':
-            serial = input("Enter Scooter Serial Number to delete: ")
-            self.deletescooter(serial)
-        elif choice == '16':
-            code = self.createrestorecode('superadmin')
-            self.makebackup(code)
-        elif choice == '17':
-            code = input("Enter restore code: ")
-            b_id = input("Enter backup ID: ")
-            self.restoresystembackup(code,b_id)
+            soc = input("New SoC (%): ")
+            if soc: data['state_of_charge'] = float(soc)
+            loc = input("New Location (lat,long): ")
+            if loc: data['location'] = loc
+            oos = input("Out of Service (0/1): ")
+            if oos: data['out_of_service_status'] = int(oos)
+            mil = input("New Mileage (km): ")
+            if mil: data['mileage'] = float(mil)
+            lmd = input("New Last Maintenance Date (YYYY-MM-DD): ")
+            if lmd: data['last_maintenance_date'] = lmd
+            self.updatescooter(sn, data, serviceengineer=False)
+
+        elif choice == '21':
+            sn = input("Scooter Serial Number to delete: ")
+            self.deletescooter(sn)
         else:
             print("That's not a valid option. Please try again.")
 
+
     def show_menu(self):
-        print("1. Change My Password") #works
+        print("1. Change My Password")
         print("2. Log Out")
+
+        print("\n--- System Administrator Management ---")
         print("3. Add New System Administrator")
         print("4. Update System Administrator Info")
         print("5. Delete System Administrator")
         print("6. Reset System Administrator Password")
+
+        print("\n--- Restore Code Management ---")
         print("7. Generate Restore Code for System Admin Backup")
         print("8. Revoke Restore Code")
-        print("9. View All System Logs")
-        print("10. Add New Traveller (Like System Admin)")
-        print("11. Update Traveller Info (Like System Admin)")
-        print("12. Delete Traveller (Like System Admin)")
-        print("13. Add New Scooter (Like System Admin)")
-        print("14. Update Scooter Info (Like System Admin)")
-        print("15. Delete Scooter (Like System Admin)")
-        print("16. Make backup")
-        print("17. Restore backup from backup")
+
+        print("\n--- Service Engineer Management ---")
+        print("9. Add New Service Engineer")
+        print("10. Update Service Engineer Info")
+        print("11. Delete Service Engineer")
+        print("12. Reset Service Engineer Password")
+
+        print("\n--- Logs & Backup ---")
+        print("13. View All System Logs")
+        print("14. Make Backup")
+        print("15. Restore Backup from Backup")
+
+        print("\n--- Shared Traveller & Scooter Management ---")
+        print("16. Add New Traveller")
+        print("17. Update Traveller Info")
+        print("18. Delete Traveller")
+        print("19. Add New Scooter")
+        print("20. Update Scooter Info")
+        print("21. Delete Scooter")

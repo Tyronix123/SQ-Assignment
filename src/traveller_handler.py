@@ -32,19 +32,15 @@ class TravellerHandler:
             self.logger.writelog(username, "Add Traveller Failed", f"Invalid city '{cleaned_data.get('city')}'", issuspicious=True)
             return
         
-        existing_traveller = self.db_handler.getdata('travellers', {'email_address': cleaned_data.get('email_address', '')})
+        existing_traveller = self.db_handler.getdata('travellers', {'email': cleaned_data.get('email', '')})
         if existing_traveller:
-            print(f"Error: Traveller with email address '{cleaned_data.get('email_address', '')}' already exists.")
-            self.logger.writelog(username, "Add Traveller Failed", f"Duplicate email address: {cleaned_data.get('email_address', '')}", issuspicious=True)
+            print(f"Error: Traveller with email address '{cleaned_data.get('email', '')}' already exists.")
+            self.logger.writelog(username, "Add Traveller Failed", f"Duplicate email address: {cleaned_data.get('email', '')}", issuspicious=True)
             return
 
-        customer_id = "CUST-" + secrets.token_hex(8)
         reg_date = datetime.date.today().isoformat()
 
-        
-
         data_to_insert = {
-            'customer_id': customer_id,
             'first_name': cleaned_data.get('first_name', ''),
             'last_name': cleaned_data.get('last_name', ''),
             'birthday': cleaned_data.get('birthday', ''),
@@ -53,15 +49,16 @@ class TravellerHandler:
             'house_number': cleaned_data.get('house_number', ''),
             'zip_code': cleaned_data.get('zip_code', ''),
             'city': cleaned_data.get('city', ''),
-            'email_address': cleaned_data.get('email_address', ''),
+            'email': cleaned_data.get('email', ''),
             'mobile_phone': cleaned_data.get('mobile_phone', ''),
-            'driving_license_number': cleaned_data.get('driving_license_number', ''),
+            'driving_license': cleaned_data.get('driving_license', ''),
             'registration_date': reg_date
         }
+
         try:
             self.db_handler.addnewrecord('travellers', data_to_insert)
-            print(f"Traveller '{data_to_insert['first_name']} {data_to_insert['last_name']}' added with ID: {customer_id}")
-            self.logger.writelog(username, "Add Traveller", f"New traveller '{customer_id}' added.")
+            print(f"Traveller '{data_to_insert['first_name']} {data_to_insert['last_name']}' added")
+            self.logger.writelog(username, "Add Traveller", f"New traveller '{data_to_insert['first_name']} {data_to_insert['last_name']}'added.")
         except Exception as e:
             print(f"Couldn't add traveller. Error: {e}")
             self.logger.writelog(username, "Add Traveller Failed", f"Error: {e}", issuspicious=True)
@@ -154,7 +151,7 @@ class TravellerHandler:
             'customer_id': 'Customer ID',
             'first_name': 'First Name',
             'last_name': 'Last Name',
-            'email_address': 'Email',
+            'email': 'Email',
             'mobile_phone': 'Phone'
         }
 
@@ -187,7 +184,7 @@ class TravellerHandler:
                 t = result['traveller']
                 print(
                     f"  ID: {t.get('customer_id')}, Name: {t.get('first_name')} {t.get('last_name')}, "
-                    f"Email: {t.get('email_address')}, Phone: {t.get('mobile_phone')}")
+                    f"Email: {t.get('email')}, Phone: {t.get('mobile_phone')}")
                 print(f"    (Matched on {result['matched_field']}: {result['matched_value']})")
 
             self.logger.writelog(username, "Search Traveller", 

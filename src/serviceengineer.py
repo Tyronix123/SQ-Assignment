@@ -8,11 +8,15 @@ from logger import Logger
 from input_validation import InputValidation
 from input_handler import InputHandler
 from traveller_handler import TravellerHandler
+from scooter_handler import ScooterHandler
 from user import User
 
 
 class ServiceEngineer(User):
-    def __init__(self, username, password_hash, role, firstname, lastname, reg_date=None, db_handler: DBHandler = None, logger: Logger = None, input_validation: InputValidation = None, input_handler: InputHandler = None):
+    def __init__(self, dutch_cities, username, password_hash, role, firstname, lastname, reg_date=None, 
+                 db_handler: DBHandler = None, logger: Logger = None, input_validation: InputValidation = None, input_handler: InputHandler = None,
+                 traveller_handler: TravellerHandler = None, scooter_handler: ScooterHandler = None):
+        self.dutch_cities = dutch_cities
         self.username = username
         self.passwordhash = password_hash
         self.role = role
@@ -23,9 +27,8 @@ class ServiceEngineer(User):
         self.logger = logger
         self.input_validation = input_validation
         self.input_handler = input_handler
-        self.dutch_cities = ["Amsterdam", "Rotterdam", "Utrecht", "The Hague", "Eindhoven",
-                             "Groningen", "Maastricht", "Leiden", "Haarlem", "Delft"]
-        self.traveller_handler = TravellerHandler(db_handler, logger, self.dutch_cities)
+        self.traveller_handler = traveller_handler
+        self.scooter_handler = scooter_handler
 
     def addtraveller(self, travellerinfo):
         self.traveller_handler.add_traveller(travellerinfo, self.username)
@@ -40,72 +43,7 @@ class ServiceEngineer(User):
         return self.traveller_handler.search_traveller(query, self.username)
 
     def updatescooterlimit(self, serialnumber, newinfo):
-        print(f"\nUpdating Scooter Info (Limited for Service Engineer) for Serial: {serialnumber}")
-        
-        if not self.db_handler:
-            print("Error: Database not connected. Can't update scooter.")
-            return
-
-        existing_scooter = self.db_handler.getdata('scooters', {'serial_number': serialnumber})
-        if not existing_scooter:
-            print(f"Error: Scooter with serial number '{serialnumber}' not found.")
-            self.logger.writelog(self.username, "Update Scooter Failed", f"Scooter '{serialnumber}' not found for SE update", is_suspicious=True)
-            return
-
-        allowed_fields = ['state_of_charge', 'location', 'out_of_service_status', 'mileage', 'last_maintenance_date']
-        updates_for_db = {}
-        originalvalues = existing_scooter[0]
-
-        for key, value in newinfo.items():
-            if key not in allowed_fields:
-                print(f"Service Engineers are not allowed to change '{key}'. Skipping this field.")
-                self.logger.writelog(self.username, "Update Scooter Failed",
-                                f"SE tried to change forbidden field '{key}' on '{serialnumber}'", is_suspicious=True)
-                continue
-
-            try:
-                if key == 'state_of_charge':
-                    cleaned = self.input_handler.clean_soc(value)
-                elif key == 'location':
-                    lat = value.get("latitude", 0.0)
-                    lon = value.get("longitude", 0.0)
-                    cleaned = self.input_handler.clean_location(lat, lon)
-                elif key == 'out_of_service_status':
-                    cleaned = self.input_handler.clean_out_of_service(value)
-                elif key == 'mileage':
-                    cleaned = self.input_handler.clean_mileage(value)
-                elif key == 'last_maintenance_date':
-                    cleaned = self.input_handler.clean_last_maintenance_date(value)
-                else:
-                    cleaned = value
-
-            except ValueError as ve:
-                print(f"Validation error for '{key}': {ve}. Update cancelled.")
-                self.logger.writelog(self.username, "Update Scooter Failed", f"Invalid value for '{key}' on scooter '{serialnumber}'", is_suspicious=True)
-                continue
-
-            if key == 'location':
-                old_loc = originalvalues.get('location', {})
-                if round(old_loc.get('latitude', 0), 5) != cleaned['latitude'] or round(old_loc.get('longitude', 0), 5) != cleaned['longitude']:
-                    updates_for_db[key] = cleaned
-                else:
-                    print(f"'{key}' is the same. No update needed.")
-            elif str(originalvalues.get(key, '')).strip() != str(cleaned).strip():
-                updates_for_db[key] = cleaned
-            else:
-                print(f"'{key}' is the same. No update needed.")
-
-        if not updates_for_db:
-            print("No valid or changed information to update.")
-            return
-
-        try:
-            self.db_handler.updateexistingrecord('scooters', 'serial_number', serialnumber, updates_for_db)
-            print(f"Scooter with serial number '{serialnumber}' successfully updated.")
-            self.logger.writelog(self.username, "Update Scooter", f"Limited update by Service Engineer for scooter '{serialnumber}'.")
-        except Exception as e:
-            print(f"Error while updating scooter '{serialnumber}': {e}")
-            self.logger.writelog(self.username, "Update Scooter Failed", f"Database error: {e}", is_suspicious=True)
+        self.scooter_handler.updatescooterlimit(serialnumber, newinfo, self.username)
 
 
     def searchscooter(self, query):
@@ -169,19 +107,17 @@ class ServiceEngineer(User):
                 'house_number': input("Traveller House Number: "),
                 'zip_code': input("Traveller Zip Code (DDDDXX): "),
                 'city': input(f"Traveller City (choose from {', '.join(self.dutch_cities)}): "),
-                'email_address': input("Traveller Email Address: "),
+                'email': input("Traveller Email Address: "),
                 'mobile_phone': input("Traveller Mobile Phone (8 digits, e.g., 12345678): "),
-                'driving_license_number': input("Traveller Driving License Number (XXDDDDDDD or XDDDDDDDD): ")
+                'driving_license': input("Traveller Driving License Number (XXDDDDDDD or XDDDDDDDD): ")
             }
-            if self.input_validation.is_valid_phone(tinfo['mobile_phone']):
-                tinfo['mobile_phone'] = "+31-6-" + tinfo['mobile_phone']
             self.addtraveller(tinfo)
         elif choice == '4':
             custid = input("Enter Traveller Customer ID to update: ")
             updatedata = {}
             print("Enter new values (leave empty to skip):")
             new_email = input("New Email: ")
-            if new_email: updatedata['email_address'] = new_email
+            if new_email: updatedata['email'] = new_email
             new_phone = input("New Mobile Phone (8 digits): ")
             if new_phone:
                 if self.input_validation.is_valid_phone(new_phone):
@@ -224,10 +160,8 @@ class ServiceEngineer(User):
 
 
     def show_menu(self):
-        print("\n--- Your Menu ---")
         print("1. Change My Password")
         print("2. Log Out")
-        print("Service Engineer Specific")
         print("3. Add New Traveller")
         print("4. Update Traveller Info")
         print("5. Delete Traveller")
