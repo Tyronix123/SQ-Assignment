@@ -27,13 +27,6 @@ class ServiceEngineer(User):
                              "Groningen", "Maastricht", "Leiden", "Haarlem", "Delft"]
         self.traveller_handler = TravellerHandler(db_handler, logger, self.dutch_cities)
 
-
-    def logmyaction(self, details, additional_info="", is_suspicious=False):
-        if self.logger:
-            self.logger.writelog(self.username, details, additional_info, is_suspicious)
-        else:
-            print(f"LOG (no logger connected): {details} - {additional_info}")
-
     def addtraveller(self, travellerinfo):
         self.traveller_handler.add_traveller(travellerinfo, self.username)
 
@@ -56,7 +49,7 @@ class ServiceEngineer(User):
         existing_scooter = self.db_handler.getdata('scooters', {'serial_number': serialnumber})
         if not existing_scooter:
             print(f"Error: Scooter with serial number '{serialnumber}' not found.")
-            self.logmyaction("Update Scooter Failed", f"Scooter '{serialnumber}' not found for SE update", is_suspicious=True)
+            self.logger.writelog(self.username, "Update Scooter Failed", f"Scooter '{serialnumber}' not found for SE update", is_suspicious=True)
             return
 
         allowed_fields = ['state_of_charge', 'location', 'out_of_service_status', 'mileage', 'last_maintenance_date']
@@ -66,7 +59,7 @@ class ServiceEngineer(User):
         for key, value in newinfo.items():
             if key not in allowed_fields:
                 print(f"Service Engineers are not allowed to change '{key}'. Skipping this field.")
-                self.logmyaction("Update Scooter Failed",
+                self.logger.writelog(self.username, "Update Scooter Failed",
                                 f"SE tried to change forbidden field '{key}' on '{serialnumber}'", is_suspicious=True)
                 continue
 
@@ -88,7 +81,7 @@ class ServiceEngineer(User):
 
             except ValueError as ve:
                 print(f"Validation error for '{key}': {ve}. Update cancelled.")
-                self.logmyaction("Update Scooter Failed", f"Invalid value for '{key}' on scooter '{serialnumber}'", is_suspicious=True)
+                self.logger.writelog(self.username, "Update Scooter Failed", f"Invalid value for '{key}' on scooter '{serialnumber}'", is_suspicious=True)
                 continue
 
             if key == 'location':
@@ -109,10 +102,10 @@ class ServiceEngineer(User):
         try:
             self.db_handler.updateexistingrecord('scooters', 'serial_number', serialnumber, updates_for_db)
             print(f"Scooter with serial number '{serialnumber}' successfully updated.")
-            self.logmyaction("Update Scooter", f"Limited update by Service Engineer for scooter '{serialnumber}'.")
+            self.logger.writelog(self.username, "Update Scooter", f"Limited update by Service Engineer for scooter '{serialnumber}'.")
         except Exception as e:
             print(f"Error while updating scooter '{serialnumber}': {e}")
-            self.logmyaction("Update Scooter Failed", f"Database error: {e}", is_suspicious=True)
+            self.logger.writelog(self.username, "Update Scooter Failed", f"Database error: {e}", is_suspicious=True)
 
 
     def searchscooter(self, query):
@@ -159,10 +152,10 @@ class ServiceEngineer(User):
                     f"SoC: {s.get('soc')}%, Location: {s.get('location')}")
                 print(f"    (Matched on {result['matched_field']}: {result['matched_value']})")
             
-            self.logmyaction("Search Scooter", f"Searched for '{query}', found {len(results)} results.")
+            self.logger.writelog(self.username, "Search Scooter", f"Searched for '{query}', found {len(results)} results.")
         else:
             print("No scooters found matching your search.")
-            self.logmyaction("Search Scooter", f"Searched for '{query}', scooter not found.")
+            self.logger.writelog(self.username, "Search Scooter", f"Searched for '{query}', scooter not found.")
         return results
 
     def handle_menu_choice(self, choice):

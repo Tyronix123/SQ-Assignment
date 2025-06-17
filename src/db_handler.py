@@ -142,7 +142,7 @@ class DBHandler:
                 values.append(self.encryptdata(str(val)))
             elif table_name == 'scooters' and col == 'location':
                 values.append(self.encryptdata(str(val)))
-            elif table_name == 'logs' and (col == 'details' or col == 'additional_info'):
+            elif table_name == 'logs' and (col == 'activity' or col == 'details'):
                 values.append(self.encryptdata(str(val)))
             else:
                 values.append(val)
@@ -176,7 +176,7 @@ class DBHandler:
                     recorddict[colname] = self.decryptdata(value)
                 elif tablename == 'scooters' and colname == 'location' and value is not None:
                     recorddict[colname] = self.decryptdata(value)
-                elif tablename == 'logs' and (colname == 'details' or colname == 'additional_info') and value is not None:
+                elif tablename == 'logs' and (colname == 'activity' or colname == 'details') and value is not None:
                     recorddict[colname] = self.decryptdata(value)
                 else:
                     recorddict[colname] = value
@@ -196,7 +196,7 @@ class DBHandler:
                 values.append(self.encryptdata(str(val)))
             elif tablename == 'scooters' and col == 'location':
                 values.append(self.encryptdata(str(val)))
-            elif tablename == 'logs' and (col == 'details' or col == 'additional_info'):
+            elif tablename == 'logs' and (col == 'activity' or col == 'details'):
                 values.append(self.encryptdata(str(val)))
             else:
                 values.append(val)

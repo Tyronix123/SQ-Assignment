@@ -183,7 +183,7 @@ class InputHandler:
         return {
             "username":  self.clean_username(data.get("username", "")),
             "password":  self.clean_password(data.get("password", "")),
-            "firstname": self.clean_first_name(data.get("firstname", "")),
-            "lastname":  self.clean_last_name(data.get("lastname", "")),
+            "first_name": self.clean_first_name(data.get("firstname", "")),
+            "last_name":  self.clean_last_name(data.get("lastname", "")),
             "role":      self.clean_role(data.get("role", "")),
         }

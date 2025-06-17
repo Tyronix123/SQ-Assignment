@@ -23,7 +23,7 @@ class SystemAdministrator(SuperAdministrator):
         if self._manage_user_account(username, password, firstname, lastname, "Service Engineer", "Creating a New Service Engineer"):
             if self._create_user_record(username, password, firstname, lastname, "ServiceEngineer"):
                 print("Service Engineer was successfully added")
-                self.logmyaction("Added Service Engineer", f"New Service Engineer '{username}' created.")
+                self.logger.writelog(self.username, "Added Service Engineer", f"New Service Engineer '{username}' created.")
 
     def updateserviceengineerinfo(self, usernametochange, new_info):
         self._update_user_info(usernametochange, new_info, "ServiceEngineer")
