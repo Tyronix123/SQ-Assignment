@@ -84,7 +84,7 @@ class SuperAdministrator(User):
             print(f"Something went wrong while adding the {role}: {e}")
             self.logger.writelog(self.username, f"Add {role} Failed", f"Error: {e}", issuspicious=True)
             return False
-        
+
     def _update_user_info(self, usernametochange: str, newinfo: dict, role: str) -> bool:
         print(f"\n-- Changing {role} Details for: {usernametochange} --")
 
@@ -92,11 +92,21 @@ class SuperAdministrator(User):
             print("Error: Database not connected. Can't update user.")
             return False
 
-        user_records = self.db_handler.getdata('users', {'username': usernametochange})
-        if not user_records or user_records[0].get('role') != role:
+        all_users_raw = self.db_handler.getrawdata('users')
+        target_user = None
+
+        for user in all_users_raw:
+            try:
+                decrypted_username = self.db_handler.decryptdata(user['username'])
+            except Exception:
+                continue
+            if decrypted_username == usernametochange and user['role'] == role:
+                target_user = user
+                break
+
+        if not target_user:
             print(f"Error: {role} '{usernametochange}' not found or wrong role.")
-            self.logger.writelog(self.username, f"Update {role} Failed",
-                                f"Target '{usernametochange}' not found or wrong role", issuspicious=True)
+            self.logger.writelog(self.getmyusername(), f"Update {role} Failed", f"Target '{usernametochange}' not found or wrong role", issuspicious=True)
             return False
 
         cleaned = {}
@@ -108,17 +118,18 @@ class SuperAdministrator(User):
             if 'username' in newinfo:
                 new_username = self.input_handler.clean_username(newinfo['username'])
 
-                if new_username != usernametochange:
-                    if self.db_handler.getdata('users', {'username': new_username}):
-                        print(f"Error: Username '{new_username}' already exists.")
-                        self.logger.writelog(self.username, f"Update {role} Failed",
-                                            f"Attempted to set duplicate username '{new_username}'", issuspicious=True)
-                        return False
-                    cleaned['username'] = new_username
+                all_users = self.db_handler.getdata('users')
+                if any(u['username'] == new_username for u in all_users):
+                    print(f"Error: Username '{new_username}' already exists.")
+                    self.logger.writelog(self.getmyusername(), f"Update {role} Failed",
+                                        f"Duplicate username '{new_username}'", issuspicious=True)
+                    return False
+
+                cleaned['username'] = new_username
 
         except ValueError as ve:
             print(f"Validation error: {ve}. Update cancelled.")
-            self.logger.writelog(self.username, f"Update {role} Failed",
+            self.logger.writelog(self.getmyusername(), f"Update {role} Failed",
                                 f"Validation error for '{usernametochange}': {ve}", issuspicious=True)
             return False
 
@@ -127,17 +138,18 @@ class SuperAdministrator(User):
             return False
 
         try:
-            self.db_handler.updateexistingrecord('users', 'username', usernametochange, cleaned)
+            encrypted_old_username = target_user['username']
+
+            self.db_handler.updateexistingrecord('users', 'username', encrypted_old_username, cleaned)
             print(f"{role} '{usernametochange}' updated successfully!")
-            self.logger.writelog(self.username, f"Update {role}",
+            self.logger.writelog(self.getmyusername(), f"Update {role}",
                                 f"Details updated for '{usernametochange}'")
             return True
         except Exception as e:
             print(f"Couldn't update {role} '{usernametochange}'. Error: {e}")
-            self.logger.writelog(self.username, f"Update {role} Failed",
+            self.logger.writelog(self.getmyusername(), f"Update {role} Failed",
                                 f"Error updating '{usernametochange}': {e}", issuspicious=True)
             return False
-
 
     def _delete_user(self, username_to_delete, role, self_deletion_message):
         print(f"\n--- Deleting {role}: {username_to_delete} ---")
@@ -150,11 +162,22 @@ class SuperAdministrator(User):
             self.logger.writelog(self.username, f"Delete {role} Failed", f"Tried to delete self ({username_to_delete})", issuspicious=True)
             return False
 
-        target_admin_records = self.db_handler.getdata('users', {'username': username_to_delete})
-        if not target_admin_records or target_admin_records[0].get('role') != role:
+        all_users_raw = self.db_handler.getrawdata('users')
+        target_user = None
+
+        for user in all_users_raw:
+            try:
+                decrypted_username = self.db_handler.decryptdata(user['username'])
+                if decrypted_username == username_to_delete and user.get('role') == role:
+                    target_user = user
+                    break
+            except Exception:
+                continue
+
+        if not target_user:
             print(f"Error: {role} '{username_to_delete}' not found or isn't a {role}.")
             self.logger.writelog(self.username, f"Delete {role} Failed",
-                           f"Target '{username_to_delete}' not found or wrong role", issuspicious=True)
+                                f"Target '{username_to_delete}' not found or wrong role", issuspicious=True)
             return False
 
         confirmation = input(
@@ -165,15 +188,18 @@ class SuperAdministrator(User):
             return False
 
         try:
-            self.db_handler.deleterecord('users', 'username', username_to_delete)
+            encrypted_username = target_user['username']
+            self.db_handler.deleterecord('users', 'username', encrypted_username)
             print(f"{role} '{username_to_delete}' has been deleted.")
             self.logger.writelog(self.username, f"Delete {role}", f"{role} '{username_to_delete}' deleted.")
             return True
         except Exception as e:
             print(f"Problem occurred. Couldn't delete: '{username_to_delete}'. Error: {e}")
             self.logger.writelog(self.username, f"Delete {role} Failed", f"Error deleting '{username_to_delete}': {e}",
-                           issuspicious=True)
+                                issuspicious=True)
             return False
+
+
 
     def _reset_password(self, username_reset, newpassword, role):
         print(f"\n-- {role} password reset: {username_reset} --")
@@ -181,31 +207,61 @@ class SuperAdministrator(User):
             print("Error: Database is not available.")
             return False
 
-        target_admin_records = self.db_handler.getdata('users', {'username': username_reset})
-        if not target_admin_records or target_admin_records[0].get('role') != role:
+        all_users = self.db_handler.getdata('users')
+        target_user = None
+
+        for user in all_users:
+            if user['username'] == username_reset and user['role'] == role:
+                target_user = user
+                break
+
+        if not target_user:
             print(f"Error: {role} '{username_reset}' not found.")
-            self.logger.writelog(self.username, f"Reset {role} Password Failed",
-                           f"Target '{username_reset}' not found or wrong role", issuspicious=True)
+            self.logger.writelog(
+                self.username,
+                f"Reset {role} Password Failed",
+                f"Target '{username_reset}' not found or wrong role",
+                issuspicious=True
+            )
             return False
 
         if not self.input_validation.is_valid_password(newpassword):
             print("The new password isn't strong enough.")
-            self.logger.writelog(self.username, f"Reset {role} Password Failed", f"Bad new password for '{username_reset}'",
-                           issuspicious=True)
+            self.logger.writelog(
+                self.username,
+                f"Reset {role} Password Failed",
+                f"Bad new password for '{username_reset}'",
+                issuspicious=True
+            )
             return False
 
         hashed_password = self.makepasswordhash(newpassword)
+
         try:
-            self.db_handler.updateexistingrecord('users', 'username', username_reset, {'password_hash': hashed_password})
+            encrypted_username = self.db_handler.encryptdata(username_reset)
+            self.db_handler.updateexistingrecord(
+                'users',
+                'username',
+                encrypted_username,
+                {'password_hash': hashed_password}
+            )
             print(f"Password for {role} '{username_reset}' has been successfully reset!")
-            self.logger.writelog(self.username, f"Reset {role} Password",
-                           f"Password for '{username_reset}' reset.")
+            self.logger.writelog(
+                self.username,
+                f"Reset {role} Password",
+                f"Password for '{username_reset}' reset."
+            )
             return True
         except Exception as e:
             print(f"A problem happened while resetting password for '{username_reset}'. Error: {e}")
-            self.logger.writelog(self.username, f"Reset {role} Password Failed",
-                           f"Error resetting password for '{username_reset}': {e}", issuspicious=True)
+            self.logger.writelog(
+                self.username,
+                f"Reset {role} Password Failed",
+                f"Error resetting password for '{username_reset}': {e}",
+                issuspicious=True
+            )
             return False
+
 
     def addsystemadmin(self, username, password, firstname, lastname):
         if self._manage_user_account(username, password, firstname, lastname, "SystemAdministrator", "Creating a New System Administrator"):
@@ -222,86 +278,145 @@ class SuperAdministrator(User):
     def resetpasswordsysadmin(self, usernamereset, newpassword):
         self._reset_password(usernamereset, newpassword, "SystemAdministrator")
 
-    def createrestorecode(self, sysadminusername):
+    def createrestorecode(self, sysadminusername: str):
         print(f"\nGenerating Restore Code for System Administrator: {sysadminusername}")
+
         if not self.db_handler:
-            print("Error: Database is not ready. Can't generate restore code.")
+            print("Error: Database not connected. Can't generate restore code.")
             return "ERROR"
+
+        all_users_raw = self.db_handler.getrawdata('users')
+        target_user_raw = None
+        creator_user_raw = None
+
         
-        if sysadminusername != 'superadmin':
-            target_admin_records = self.db_handler.getdata('users', {'username': sysadminusername})
-            if not target_admin_records or target_admin_records[0].get('role') != 'SystemAdministrator':
-                print(f"Error: System Administrator '{sysadminusername}' not found or isn't a System Administrator. Cannot generate restore code.")
-                self.logger.writelog(self.username, "Generate Restore Code Failed",
-                               f"Target '{sysadminusername}' not found/wrong role", issuspicious=True)
-                return "ERROR"
+        for user in all_users_raw:
+            try:
+                uname = self.db_handler.decryptdata(user['username'])
+                if uname == self.username:
+                    creator_user_raw = user
+                    break
+            except Exception:
+                continue
 
-        restore_code = secrets.token_urlsafe(16)
-        backup_id = secrets.token_hex(8)
-        # backup_file_name = f"backup_{backup_id}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.zip"
-        expiry_date = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
 
+        for user in all_users_raw:
+            try:
+                uname = self.db_handler.decryptdata(user['username'])
+                if uname == sysadminusername and user.get('role') == 'SystemAdministrator':
+                    target_user_raw = user
+                    break
+            except Exception:
+                continue
+
+        if not target_user_raw:
+            print(f"Error: System Administrator '{sysadminusername}' not found or wrong role.")
+            self.logger.writelog(self.getmyusername(),
+                                "Generate Restore Code Failed",
+                                f"Target '{sysadminusername}' not found / wrong role",
+                                issuspicious=True)
+            return "ERROR"
+
+        restore_code  = secrets.token_urlsafe(16)
+        backup_id     = secrets.token_hex(8)
+        expiry_date   = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
 
         try:
             self.db_handler.addnewrecord(
                 'restore_codes',
                 {
-                    'code': restore_code,
-                    'backup_id': backup_id,
+                    'code'           : restore_code,
+                    'backup_id'      : backup_id,
                     'backup_file_name': None,
-                    'created_by': self.username,
-                    'for_user': sysadminusername,
-                    'expiry_date': expiry_date,
-                    'used': 0
+                    'created_by'     : creator_user_raw['username'], 
+                    'for_user'       : target_user_raw['username'],
+                    'expiry_date'    : expiry_date,
+                    'used'           : 0
                 }
             )
-            print(f"Successfully generated a restore code for '{sysadminusername}'.")
-            print(f"IMPORTANT! Restore Code: {restore_code}. This code is valid until: {expiry_date}.Backup ID (for this code): {backup_id}")
-            print("Give this code is a one time use only.")
-            self.logger.writelog(self.username, "Generate Restore Code", f"Generated code for '{sysadminusername}', backup ID: {backup_id}")
+            print(f"Restore code for '{sysadminusername}' created.\n"
+                f"Code : {restore_code}\n"
+                f"Valid : until {expiry_date}\n"
+                f"Backup ID : {backup_id}\n"
+                "(one‑time use only)")
+            self.logger.writelog(self.getmyusername(),
+                                "Generate Restore Code",
+                                f"Code generated for '{sysadminusername}', backup ID {backup_id}")
             return restore_code
+
         except Exception as e:
-            print(f"Couldn't generate restore code. Error: {e}")
-            self.logger.writelog(self.username, "Generate Restore Code Failed", f"Error: {e}", issuspicious=True)
+            print(f"Could not generate restore code. Error: {e}")
+            self.logger.writelog(self.getmyusername(),
+                                "Generate Restore Code Failed",
+                                str(e), issuspicious=True)
             return "ERROR"
 
-    def revokerestorecode(self, code_to_revoke: str) -> bool:
-        """Mark a restore code as revoked so it can no longer be used."""
-        print(f"\nRevoking restore code: {code_to_revoke}")
 
+    def revokerestorecode(self, code_to_revoke: str | None = None) -> bool:
         if not self.db_handler:
             print("Error: Database not connected. Cannot revoke code.")
             self.logger.writelog(self.username, "Revoke Code Failed", "DB not connected", issuspicious=True)
             return False
 
-        records = self.db_handler.getdata('restore_codes', {'code': code_to_revoke})
+        if not code_to_revoke:
+            today = datetime.date.today().isoformat()
+            restore_codes = self.db_handler.getdata(
+                "restore_codes",
+                {"used": 0}
+            )
+            restore_codes = [rc for rc in restore_codes if rc["expiry_date"] >= today]
+
+            if not restore_codes:
+                print("No active (unused & unexpired) restore codes found.")
+                return False
+
+            print("\nActive Restore Codes:")
+            for idx, rc in enumerate(restore_codes, start=1):
+                print(
+                    f"{idx}. Code: {rc['code']} | For: {self.db_handler.decryptdata(rc['for_user'])} | "
+                    f"Created By: {self.db_handler.decryptdata(rc['created_by'])} | Expiry: {rc['expiry_date']}"
+                )
+
+            try:
+                sel = int(input("\nSelect a code to revoke (number): ")) - 1
+                if 0 <= sel < len(restore_codes):
+                    code_to_revoke = restore_codes[sel]["code"]
+                else:
+                    print("Invalid selection.")
+                    return False
+            except ValueError:
+                print("Invalid input.")
+                return False
+
+        print(f"\nRevoking restore code: {code_to_revoke}")
+        records = self.db_handler.getdata("restore_codes", {"code": code_to_revoke})
+
         if not records:
             print("No such restore code in the system.")
-            self.logger.writelog(self.username, "Revoke Code Failed",
-                            f"Code '{code_to_revoke}' not found", issuspicious=True)
+            self.logger.writelog(
+                self.username, "Revoke Code Failed", f"Code '{code_to_revoke}' not found", issuspicious=True
+            )
             return False
 
         record = records[0]
-        if record.get('is_revoked') == 1:
+        if record.get("used") == 1:
             print("This restore code is already revoked.")
             return False
 
         try:
-            self.db_handler.updateexistingrecord('restore_codes',
-                                                'code',
-                                                code_to_revoke,
-                                                {'is_revoked': 1})
+            self.db_handler.updateexistingrecord(
+                "restore_codes", "code", code_to_revoke, {"used": 1}
+            )
             print("Restore code successfully revoked.")
-            self.logger.writelog(self.username, "Revoke Code", f"Code '{code_to_revoke}' revoked.")
+            self.logger.writelog(
+                self.username, "Revoke Code", f"Code '{code_to_revoke}' revoked."
+            )
             return True
         except Exception as e:
             print(f"Could not revoke code. Error: {e}")
             self.logger.writelog(self.username, "Revoke Code Failed", str(e), issuspicious=True)
             return False
 
-
-
-    # Backup and restore methods
     def makebackup(self, restorecode):
         print("\nInitiating System Backup")
         dbpath = self.db_handler.db_name
@@ -465,7 +580,7 @@ class SuperAdministrator(User):
         self.scooter_handler.mark_scooter_in_service(serial_number, self.username)
 
     def addserviceengineer(self, username, password, firstname, lastname):
-        if self._manage_user_account(username, password, firstname, lastname, "Service Engineer", "Creating a New Service Engineer"):
+        if self._manage_user_account(username, password, firstname, lastname, "ServiceEngineer", "Creating a New Service Engineer"):
             if self._create_user_record(username, password, firstname, lastname, "ServiceEngineer"):
                 print("Service Engineer was successfully added")
                 self.logger.writelog(self.username, "Added Service Engineer", f"New Service Engineer '{username}' created.")
@@ -536,8 +651,7 @@ class SuperAdministrator(User):
             self.createrestorecode(sa)
 
         elif choice == '8':
-            code = input("Enter restore code to revoke: ")
-            self.revokerestorecode(code)
+            self.revokerestorecode()
 
         elif choice == '9':
             u = input("New Service Engineer Username: ")
@@ -550,9 +664,11 @@ class SuperAdministrator(User):
             u = input("Username of Service Engineer to update: ")
             nf = input("New First Name (leave empty to skip): ")
             nl = input("New Last Name (leave empty to skip): ")
+            nu = input("New Username (leave empty to skip): ")
             data = {}
             if nf: data['first_name'] = nf
             if nl: data['last_name'] = nl
+            if nu: data['username'] = nu
             self.updateserviceengineerinfo(u, data)
 
         elif choice == '11':

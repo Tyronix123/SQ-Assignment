@@ -1,6 +1,8 @@
 import sqlite3
+import bcrypt
 from cryptography.fernet import Fernet
 import os
+import base64
 
 class DBHandler:
     def __init__(self, db_name, encryption_key):
@@ -92,10 +94,13 @@ class DBHandler:
 
         self.cursor.execute('''
         CREATE TABLE IF NOT EXISTS restore_codes (
-            code TEXT PRIMARY KEY,
+            code TEXT PRIMARY KEY, 
+            backup_id TEXT, 
+            backup_file_name TEXT,
             created_by TEXT,
-            for_user TEXT,
-            used TEXT,
+            for_user TEXT, 
+            `expiry_date` DATE,
+            used INTEGER,
             FOREIGN KEY(created_by) REFERENCES users(username),
             FOREIGN KEY(for_user) REFERENCES users(username)
         )
@@ -105,11 +110,15 @@ class DBHandler:
         self.conn.close()
         print(self.getdata('restore_codes'))
 
-    def encryptdata(self, data):
-        return self.cipher.encrypt(data.encode('utf-8'))
+    def encryptdata(self, data: str) -> str:
+        encrypted_bytes = self.cipher.encrypt(data.encode('utf-8'))
+        return base64.urlsafe_b64encode(encrypted_bytes).decode('utf-8')
 
-    def decryptdata(self, encrypted_data):
-        return self.cipher.decrypt(encrypted_data).decode('utf-8')
+    def decryptdata(self, encrypted_data: str) -> str:
+        encrypted_bytes = base64.urlsafe_b64decode(encrypted_data.encode('utf-8'))
+        decrypted_bytes = self.cipher.decrypt(encrypted_bytes)
+        return decrypted_bytes.decode('utf-8')
+
 
     def runquery(self, query, params=(), get_one=False, get_all=False):
         if not self.conn:
@@ -127,70 +136,125 @@ class DBHandler:
             print(f"a database error happened when running: {e}")
             return None
 
-    def addnewrecord(self, table_name, data_info):
+    def addnewrecord(self, tablename, record: dict):
         if not self.conn:
-            print("can't add record, no database connection.")
+            print("Can't add record, no database connection")
             return
 
         columns = []
+        placeholders = []
         values = []
-        question_marks = []
 
-        for col, val in data_info.items():
+        for col, val in record.items():
             columns.append(col)
-            
-            if table_name == 'users' and col == 'username':
+            placeholders.append("?")
+
+            if tablename == 'travellers' and col in [
+                'first_name', 'last_name', 'birthday', 'gender',
+                'street_name', 'house_number', 'zip_code', 'city',
+                'email', 'mobile_phone', 'driving_license'
+            ]:
                 values.append(self.encryptdata(str(val)))
 
-            elif table_name == 'travellers' and col in ['mobile_phone', 'street_name', 'house_number', 'zip_code', 'city']:
+            elif tablename == 'users' and col in ['username', 'first_name', 'last_name']:
                 values.append(self.encryptdata(str(val)))
-            
-            elif table_name == 'scooters' and col == 'location':
+
+            elif tablename == 'scooters' and col == 'location':
                 values.append(self.encryptdata(str(val)))
-            
-            elif table_name == 'logs' and col in ['activity', 'details']:
+
+            elif tablename == 'logs' and col in ['username', 'activity', 'details']:
                 values.append(self.encryptdata(str(val)))
 
             else:
                 values.append(val)
 
-            question_marks.append('?')
-
-
-        query = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({', '.join(question_marks)})"
+        query = f"INSERT INTO {tablename} ({', '.join(columns)}) VALUES ({', '.join(placeholders)})"
         self.runquery(query, tuple(values))
 
     def getdata(self, tablename, filters=None):
         if not self.conn:
             print("Can't get data, no database connection")
             return []
+
         query = f"SELECT * FROM {tablename}"
         params = []
+
         if filters:
             where_parts = []
             for col, val in filters.items():
                 where_parts.append(f"{col} = ?")
                 params.append(val)
             query += " WHERE " + " AND ".join(where_parts)
+
         rows = self.runquery(query, tuple(params), get_all=True)
+
         if not rows:
             return []
-        column_names = [description[0] for description in self.cursor.description]
+
+        column_names = [desc[0] for desc in self.cursor.description]
         results = []
+
         for rowdata in rows:
             recorddict = {}
+
             for i, colname in enumerate(column_names):
                 value = rowdata[i]
-                if tablename == 'travellers' and colname == 'mobile_phone' and value is not None:
+
+                if tablename == 'travellers' and colname in [
+                    'first_name', 'last_name', 'birthday', 'gender',
+                    'street_name', 'house_number', 'zip_code', 'city',
+                    'email', 'mobile_phone', 'driving_license'
+                ] and value is not None:
                     recorddict[colname] = self.decryptdata(value)
+
+                elif tablename == 'users' and colname in ['username', 'first_name', 'last_name'] and value is not None:
+                    recorddict[colname] = self.decryptdata(value)
+
                 elif tablename == 'scooters' and colname == 'location' and value is not None:
                     recorddict[colname] = self.decryptdata(value)
-                elif tablename == 'logs' and (colname == 'activity' or colname == 'details') and value is not None:
+
+                elif tablename == 'logs' and colname in ['username', 'activity', 'details'] and value is not None:
                     recorddict[colname] = self.decryptdata(value)
+
                 else:
                     recorddict[colname] = value
+
             results.append(recorddict)
+
         return results
+    
+
+    def getrawdata(self, table_name, filters=None):
+        try:
+            cursor = self.conn.cursor()
+            query = f"SELECT * FROM {table_name}"
+            params = []
+
+            if filters:
+                conditions = []
+                for key, value in filters.items():
+                    conditions.append(f"{key} = ?")
+                    params.append(value)
+                query += " WHERE " + " AND ".join(conditions)
+
+            cursor.execute(query, params)
+            records = cursor.fetchall()
+
+            columns = [desc[0] for desc in cursor.description]
+            results = [dict(zip(columns, row)) for row in records]
+
+            return results
+
+        except Exception as e:
+            print(f"Error retrieving raw data from {table_name}: {e}")
+            return []
+
+    
+    @staticmethod
+    def makepasswordhash(password: str) -> str:
+        salt = bcrypt.gensalt()
+        hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+        return hashed.decode('utf-8')
 
     def updateexistingrecord(self, tablename, idcolumn, id_value, new_info):
         if not self.conn:
@@ -199,14 +263,26 @@ class DBHandler:
 
         set_parts = []
         values = []
+
         for col, val in new_info.items():
             set_parts.append(f"{col} = ?")
-            if tablename == 'travellers' and col == 'mobile_phone':
+
+            if tablename == 'travellers' and col in [
+                'first_name', 'last_name', 'birthday', 'gender',
+                'street_name', 'house_number', 'zip_code', 'city',
+                'email', 'mobile_phone', 'driving_license'
+            ]:
                 values.append(self.encryptdata(str(val)))
+
+            elif tablename == 'users' and col in ['username', 'first_name', 'last_name']:
+                values.append(self.encryptdata(str(val)))
+
             elif tablename == 'scooters' and col == 'location':
                 values.append(self.encryptdata(str(val)))
-            elif tablename == 'logs' and (col == 'activity' or col == 'details'):
+
+            elif tablename == 'logs' and col in ['username', 'activity', 'details']:
                 values.append(self.encryptdata(str(val)))
+
             else:
                 values.append(val)
 
@@ -214,9 +290,11 @@ class DBHandler:
         query = f"UPDATE {tablename} SET {', '.join(set_parts)} WHERE {idcolumn} = ?"
         self.runquery(query, tuple(values))
 
+
     def deleterecord(self, table_name, id_column, id_value):
         if not self.conn:
             print("Can't delete record, no database connection active.")
             return
+                
         query = f"DELETE FROM {table_name} WHERE {id_column} = ?"
         self.runquery(query, (id_value,))

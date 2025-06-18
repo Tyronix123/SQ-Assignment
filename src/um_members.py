@@ -55,7 +55,14 @@ class UmMembers:
         superadminpassword = "Admin_123?"
         passwordhash = User.makepasswordhash(superadminpassword)
 
-        existsuperadmin = self.db_handler.getdata('users', {'username': superadminusername})
+        all_users = self.db_handler.getdata('users')
+        existsuperadmin = False
+        for user in all_users:
+            decrypted_username = user['username']
+            if decrypted_username == superadminusername:
+                existsuperadmin = True
+                break
+
         if not existsuperadmin:
             self.db_handler.addnewrecord(
                 'users',
@@ -68,7 +75,12 @@ class UmMembers:
                     'registration_date': datetime.date.today().isoformat()
                 }
             )
-            self.logger.writelog("SYSTEM", f"Default Super Administrator '{superadminusername}' created.", issuspicious=False)
+            self.logger.writelog(
+                "SYSTEM",
+                f"Default Super Administrator '{superadminusername}' created.",
+                issuspicious=False
+            )
+
 
     def run(self):
         self.setupapp()
@@ -82,7 +94,14 @@ class UmMembers:
 
             password_input = input("Enter password: ")
 
-            userlog = self.db_handler.getdata('users', {'username': usernameinput})
+            all_users = self.db_handler.getdata('users')
+            userlog = []
+
+            for user in all_users:
+                if user['username'] == usernameinput:
+                    userlog = [user]
+                    break
+
             if not userlog:
                 print("No user found. Try again")
                 self.logger.writelog("LOGIN_ATTEMPT", f"Failed login for unknown user: '{usernameinput}'", issuspicious=True)
@@ -106,9 +125,6 @@ class UmMembers:
             else:
                 self.logger.writelog(usernameinput, "Failed login attempt (wrong password).", issuspicious=True)
             self.loggedinuser = None
-
-
-
 
     def runsession(self):
         role = self.loggedinuser.__class__.__name__

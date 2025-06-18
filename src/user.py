@@ -2,10 +2,12 @@ import datetime
 import hashlib
 import secrets
 from input_validation import InputValidation
+import bcrypt
+from db_handler import DBHandler
 
 #Soort van abstract class voor SuperAdmin, SystemAdmin en ServiceEngineer
 class User:
-    def __init__(self, username, passwordhash, role, firstname, lastname, input_validation: InputValidation):
+    def __init__(self, username, passwordhash, role, firstname, lastname, input_validation: InputValidation, db_handler: DBHandler):
         self.username = username
         self.passwordhash = passwordhash
         self.role = role
@@ -14,6 +16,7 @@ class User:
         self.registrationdate = datetime.date.today().isoformat()
         self.isloggedin = False
         self.input_validation = input_validation
+        self.db_handler = db_handler
         
     def getmyusername(self):
         return self.username
@@ -22,13 +25,12 @@ class User:
         return self.isloggedin
 
     def is_valid_password(self, enteredpassword):
-        hashedenteredpassword = self.makepasswordhash(enteredpassword)
-        return hashedenteredpassword == self.passwordhash
+        return bcrypt.checkpw(enteredpassword.encode('utf-8'), self.passwordhash.encode('utf-8'))
 
     def login(self, enteredpassword):
         if self.is_valid_password(enteredpassword):
             self.isloggedin = True
-            print(f"Hello, {self.username}. You've been logged in.")
+            print(f"Hello, {self.getmyusername()}. You've been logged in.")
             return True
         else:
             print("Login failed: wrong credentials. Please try again.")
@@ -56,6 +58,5 @@ class User:
 
     @staticmethod
     def makepasswordhash(password):
-        hasher = hashlib.sha256()
-        hasher.update(password.encode('utf-8'))
-        return hasher.hexdigest()
+        salt = bcrypt.gensalt()
+        return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
