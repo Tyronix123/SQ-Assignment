@@ -14,11 +14,25 @@ class TravellerHandler:
         self.dutch_cities = ["Amsterdam", "Rotterdam", "Utrecht", "The Hague", "Eindhoven",
                             "Groningen", "Maastricht", "Leiden", "Haarlem", "Delft"]
 
-    def add_traveller(self, traveller_info, username):
+    def add_traveller(self, username):
         print("\nAdding a New Traveller")
         if not self.db_handler:
             print("Error: Database is not connected. Can't add traveller.")
             return
+        
+        traveller_info = {
+            'first_name': input("Traveller First Name: "),
+            'last_name':  input("Traveller Last Name: "),
+            'birthday':   input("Traveller Birthday (YYYY-MM-DD): "),
+            'gender':     input("Traveller Gender (Male/Female): "),
+            'street_name':input("Traveller Street Name: "),
+            'house_number':input("Traveller House Number: "),
+            'zip_code':   input("Traveller Zip Code (DDDDXX): "),
+            'city':       input(f"Traveller City (choose from {', '.join(self.dutch_cities)}): "),
+            'email':      input("Traveller Email Address: "),
+            'mobile_phone': input("Traveller Mobile Phone (8 digits): "),
+            'driving_license': input("Driving License Number (XXDDDDDDD or XDDDDDDDD): ")
+        }
 
         try:
             cleaned_data = self.input_handler.handle_traveller_data(traveller_info)
@@ -164,7 +178,9 @@ class TravellerHandler:
             print(f"A problem happened while deleting traveller '{customer_id}'. Error: {e}")
             self.logger.writelog(username, "Delete Traveller Failed", f"Error: {e}", issuspicious=True)
 
-    def search_traveller(self, query, username):
+    def search_traveller(self, username):
+        query = input("Enter search query for travellers (leave empty to list all): ")
+
         print(f"\nSearching Travellers for: '{query}'")
 
         if not self.db_handler:
@@ -179,27 +195,29 @@ class TravellerHandler:
             'mobile_phone': 'Phone'
         }
 
-        all_travellers = self.db_handler.getdata('travellers')
+        all_travellers = self.db_handler.getdata('travellers') or []
         results = []
 
         if not query:
             print("No search term provided, showing all travellers.")
-            results = all_travellers
+            results = [{'traveller': t, 'matched_field': 'N/A', 'matched_value': 'N/A'} for t in all_travellers]
         else:
             query = query.lower()
             for traveller in all_travellers:
                 matched_field = None
+                matched_value = None
                 for field, display_name in SEARCH_FIELDS.items():
                     field_value = str(traveller.get(field, '')).lower()
                     if query in field_value:
                         matched_field = display_name
+                        matched_value = traveller.get(field)
                         break
 
                 if matched_field:
                     results.append({
                         'traveller': traveller,
                         'matched_field': matched_field,
-                        'matched_value': traveller.get(field)
+                        'matched_value': matched_value
                     })
 
         if results:
@@ -211,11 +229,11 @@ class TravellerHandler:
                     f"Email: {t.get('email')}, Phone: {t.get('mobile_phone')}")
                 print(f"    (Matched on {result['matched_field']}: {result['matched_value']})")
 
-            self.logger.writelog(username, "Search Traveller", 
-                            f"Searched for '{query}', found {len(results)} results.")
+            self.logger.writelog(username, "Search Traveller",
+                                f"Searched for '{query}', found {len(results)} results.")
         else:
             print("No travellers found matching your search.")
-            self.logger.writelog(username, "Search Traveller", 
-                            f"Searched for '{query}', traveller not found.")
-        
+            self.logger.writelog(username, "Search Traveller",
+                                f"Searched for '{query}', traveller not found.")
+
         return results

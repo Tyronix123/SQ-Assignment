@@ -421,8 +421,9 @@ class ScooterHandler:
             print(f"Error while deleting scooter '{serialnumber}': {e}")
             self.logger.writelog(username, "Delete Scooter Failed", f"Database error while deleting scooter '{serialnumber}': {e}", is_suspicious=True)
 
+    def search_scooter(self, username):
+        query = input("Enter search query for scooters (leave empty to list all): ")
 
-    def search_scooter(self, query, username):
         print(f"\nSearching Scooters for: '{query}'")
 
         if not self.db_handler:
@@ -432,30 +433,36 @@ class ScooterHandler:
         SEARCH_FIELDS = {
             'serial_number': 'Serial Number',
             'brand': 'Brand',
-            'mo ': 'Model',
+            'model': 'Model',
+            'top_speed': 'Top Speed',
+            'battery_capacity': 'Battery Capacity',
+            'soc': 'State of Charge',
+            'out_of_service': 'Out of Service'
         }
 
-        all_scooters = self.db_handler.getdata('scooters')
+        all_scooters = self.db_handler.getdata('scooters') or []
         results = []
 
         if not query:
             print("No search term provided, showing all scooters.")
-            results = all_scooters
+            results = [{'scooter': s, 'matched_field': 'N/A', 'matched_value': 'N/A'} for s in all_scooters]
         else:
             query = query.lower()
             for scooter in all_scooters:
                 matched_field = None
+                matched_value = None
                 for field, display_name in SEARCH_FIELDS.items():
                     field_value = str(scooter.get(field, '')).lower()
                     if query in field_value:
                         matched_field = display_name
+                        matched_value = scooter.get(field)
                         break
 
                 if matched_field:
                     results.append({
                         'scooter': scooter,
                         'matched_field': matched_field,
-                        'matched_value': scooter.get(field)
+                        'matched_value': matched_value
                     })
 
         if results:
@@ -464,39 +471,94 @@ class ScooterHandler:
                 s = result['scooter']
                 print(
                     f"  Serial: {s.get('serial_number')}, Brand: {s.get('brand')}, Model: {s.get('model')}, "
-                    f"SoC: {s.get('soc')}%, Location: {s.get('location')}")
+                    f"Top Speed: {s.get('top_speed')} km/h, SoC: {s.get('soc')}%, Out of Service: {s.get('out_of_service')}")
                 print(f"    (Matched on {result['matched_field']}: {result['matched_value']})")
 
-            self.logger.writelog(username, "Search Scooter", f"Searched for '{query}', found {len(results)} results.")
+            self.logger.writelog(username, "Search Scooter",
+                                f"Searched for '{query}', found {len(results)} results.")
         else:
             print("No scooters found matching your search.")
-            self.logger.writelog(username, "Search Scooter", f"Searched for '{query}', scooter not found.")
+            self.logger.writelog(username, "Search Scooter",
+                                f"Searched for '{query}', scooter not found.")
+
         return results
 
-    def mark_scooter_out_of_service(self, serial_number, username, reason=""):
-        print(f"\nMarking Scooter {serial_number} as Out of Service")
-        if not self.db_handler:
-            print("Error: Database is not connected.")
-            return
 
-        existing_scooter = self.db_handler.getdata('scooters', {'serial_number': serial_number})
-        if not existing_scooter:
-            print(f"Error: Scooter with serial '{serial_number}' not found.")
-            self.logger.writelog(username, "Scooter OOS Failed", 
-                               f"Scooter '{serial_number}' not found", issuspicious=True)
-            return
+    # def search_scooter(self, query, username):
+    #     print(f"\nSearching Scooters for: '{query}'")
 
-        try:
-            self.db_handler.updateexistingrecord('scooters', 'serial_number', serial_number, {
-                'out_of_service': 1,
-                'last_maintenance': datetime.date.today().isoformat()
-            })
-            print(f"Scooter {serial_number} marked as out of service.")
-            self.logger.writelog(username, "Scooter OOS", 
-                               f"Marked scooter '{serial_number}' as out of service. Reason: {reason}")
-        except Exception as e:
-            print(f"Couldn't update scooter status. Error: {e}")
-            self.logger.writelog(username, "Scooter OOS Failed", f"Error: {e}", issuspicious=True)
+    #     if not self.db_handler:
+    #         print("Error: Database not connected. Can't search scooters.")
+    #         return []
+
+    #     SEARCH_FIELDS = {
+    #         'serial_number': 'Serial Number',
+    #         'brand': 'Brand',
+    #         'mo ': 'Model',
+    #     }
+
+    #     all_scooters = self.db_handler.getdata('scooters')
+    #     results = []
+
+    #     if not query:
+    #         print("No search term provided, showing all scooters.")
+    #         results = all_scooters
+    #     else:
+    #         query = query.lower()
+    #         for scooter in all_scooters:
+    #             matched_field = None
+    #             for field, display_name in SEARCH_FIELDS.items():
+    #                 field_value = str(scooter.get(field, '')).lower()
+    #                 if query in field_value:
+    #                     matched_field = display_name
+    #                     break
+
+    #             if matched_field:
+    #                 results.append({
+    #                     'scooter': scooter,
+    #                     'matched_field': matched_field,
+    #                     'matched_value': scooter.get(field)
+    #                 })
+
+    #     if results:
+    #         print(f"Found {len(results)} scooter(s):")
+    #         for result in results:
+    #             s = result['scooter']
+    #             print(
+    #                 f"  Serial: {s.get('serial_number')}, Brand: {s.get('brand')}, Model: {s.get('model')}, "
+    #                 f"SoC: {s.get('soc')}%, Location: {s.get('location')}")
+    #             print(f"    (Matched on {result['matched_field']}: {result['matched_value']})")
+
+    #         self.logger.writelog(username, "Search Scooter", f"Searched for '{query}', found {len(results)} results.")
+    #     else:
+    #         print("No scooters found matching your search.")
+    #         self.logger.writelog(username, "Search Scooter", f"Searched for '{query}', scooter not found.")
+    #     return results
+
+    # def mark_scooter_out_of_service(self, serial_number, username, reason=""):
+    #     print(f"\nMarking Scooter {serial_number} as Out of Service")
+    #     if not self.db_handler:
+    #         print("Error: Database is not connected.")
+    #         return
+
+    #     existing_scooter = self.db_handler.getdata('scooters', {'serial_number': serial_number})
+    #     if not existing_scooter:
+    #         print(f"Error: Scooter with serial '{serial_number}' not found.")
+    #         self.logger.writelog(username, "Scooter OOS Failed", 
+    #                            f"Scooter '{serial_number}' not found", issuspicious=True)
+    #         return
+
+    #     try:
+    #         self.db_handler.updateexistingrecord('scooters', 'serial_number', serial_number, {
+    #             'out_of_service': 1,
+    #             'last_maintenance': datetime.date.today().isoformat()
+    #         })
+    #         print(f"Scooter {serial_number} marked as out of service.")
+    #         self.logger.writelog(username, "Scooter OOS", 
+    #                            f"Marked scooter '{serial_number}' as out of service. Reason: {reason}")
+    #     except Exception as e:
+    #         print(f"Couldn't update scooter status. Error: {e}")
+    #         self.logger.writelog(username, "Scooter OOS Failed", f"Error: {e}", issuspicious=True)
 
     def mark_scooter_in_service(self, serial_number, username):
         print(f"\nMarking Scooter {serial_number} as In Service")

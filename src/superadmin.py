@@ -611,8 +611,8 @@ class SuperAdministrator(User):
                                 str(e))
 
 
-    def addtraveller(self, travellerinfo):
-        self.traveller_handler.add_traveller(travellerinfo, self.username)
+    def addtraveller(self):
+        self.traveller_handler.add_traveller(self.username)
 
     def updatetraveller(self):
         self.traveller_handler.update_traveller(self.username)
@@ -620,8 +620,8 @@ class SuperAdministrator(User):
     def deletetraveller(self, ):
         self.traveller_handler.delete_traveller(self.username)
 
-    def searchtraveller(self, query):
-        return self.traveller_handler.search_traveller(query, self.username)
+    def searchtraveller(self):
+        return self.traveller_handler.search_traveller(self.username)
 
     def addscooter(self):
         self.scooter_handler.add_scooter(self.username)
@@ -635,14 +635,14 @@ class SuperAdministrator(User):
     def deletescooter(self):
         self.scooter_handler.delete_scooter(self.username)
 
-    def getscooterinfo(self, query):
-        return self.scooter_handler.search_scooter(query, self.username)
+    def searchscooter(self):
+        return self.scooter_handler.search_scooter(self.username)
 
-    def mark_scooter_out_of_service(self, serial_number, reason=""):
-        self.scooter_handler.mark_scooter_out_of_service(serial_number, self.username, reason)
+    # def mark_scooter_out_of_service(self, serial_number, reason=""):
+    #     self.scooter_handler.mark_scooter_out_of_service(serial_number, self.username, reason)
 
-    def mark_scooter_in_service(self, serial_number):
-        self.scooter_handler.mark_scooter_in_service(serial_number, self.username)
+    # def mark_scooter_in_service(self, serial_number):
+    #     self.scooter_handler.mark_scooter_in_service(serial_number, self.username)
 
     def addserviceengineer(self, username, password, firstname, lastname):
         if self._manage_user_account(username, password, firstname, lastname, "ServiceEngineer", "Creating a New Service Engineer"):
@@ -667,7 +667,6 @@ class SuperAdministrator(User):
             self.logger.writelog(self.username, "View Logs Failed", "Logger unavailable.")
 
     def viewallusers(self):
-        print("\nAll System Users and Their Roles")
         if not self.db_handler:
             print("Error: Database not connected. Can't view users.")
             return
@@ -677,8 +676,11 @@ class SuperAdministrator(User):
             print("No users found in the system.")
             return
 
+        print("\n--- List of Users and Roles ---")
         for user in users:
-            print(f"Username: {user.get('username')}, Role: {user.get('role')}")
+            username = user.get('username', 'Unknown')
+            role = user.get('role', 'No Role Assigned')
+            print(f"Username: {username} | Role: {role}")
         self.logger.writelog(self.username, "View Users", "Viewed all system users and roles.")
 
     def handle_menu_choice(self, choice):
@@ -746,44 +748,40 @@ class SuperAdministrator(User):
             self.resetengineerpassword(u, np)
 
         elif choice == '13':
-            self.viewlogs()
+            self.viewallusers()
 
         elif choice == '14':
-            self.makebackup()
+            self.viewlogs()
 
         elif choice == '15':
-            self.restoresystembackup()
+            self.makebackup()
 
         elif choice == '16':
-            tinfo = {
-                'first_name': input("Traveller First Name: "),
-                'last_name':  input("Traveller Last Name: "),
-                'birthday':   input("Traveller Birthday (YYYY-MM-DD): "),
-                'gender':     input("Traveller Gender (Male/Female): "),
-                'street_name':input("Traveller Street Name: "),
-                'house_number':input("Traveller House Number: "),
-                'zip_code':   input("Traveller Zip Code (DDDDXX): "),
-                'city':       input(f"Traveller City (choose from {', '.join(self.dutch_cities)}): "),
-                'email':      input("Traveller Email Address: "),
-                'mobile_phone': input("Traveller Mobile Phone (8 digits): "),
-                'driving_license': input("Driving License Number (XXDDDDDDD or XDDDDDDDD): ")
-            }
-            self.addtraveller(tinfo)
+            self.restoresystembackup()
 
         elif choice == '17':
-            self.updatetraveller()
+            self.addtraveller()
 
         elif choice == '18':
-            self.deletetraveller()
+            self.updatetraveller()
 
         elif choice == '19':
-            self.addscooter()
+            self.deletetraveller()
 
         elif choice == '20':
-            self.updatescooter()
+            self.searchtraveller()
 
         elif choice == '21':
+            self.addscooter()
+
+        elif choice == '22':
+            self.updatescooter()
+
+        elif choice == '23':
             self.deletescooter()
+        
+        elif choice == '24':
+            self.searchscooter()
         else:
             print("That's not a valid option. Please try again.")
 
@@ -791,6 +789,7 @@ class SuperAdministrator(User):
     def show_menu(self):
         print("1. Change My Password")
         print("2. Log Out")
+
 
         print("\n--- System Administrator Management ---")
         print("3. Add New System Administrator")
@@ -809,14 +808,17 @@ class SuperAdministrator(User):
         print("12. Reset Service Engineer Password")
 
         print("\n--- Logs & Backup ---")
-        print("13. View All System Logs")
-        print("14. Make Backup")
-        print("15. Restore Backup from Backup")
+        print("13. View All Users")
+        print("14. View All System Logs")
+        print("15. Make Backup")
+        print("16. Restore Backup from Backup")
 
         print("\n--- Shared Traveller & Scooter Management ---")
-        print("16. Add New Traveller")
-        print("17. Update Traveller Info")
-        print("18. Delete Traveller")
-        print("19. Add New Scooter")
-        print("20. Update Scooter Info")
-        print("21. Delete Scooter")
+        print("17. Add New Traveller")
+        print("18. Update Traveller Info")
+        print("19. Delete Traveller")
+        print("20. Search Traveller")
+        print("21. Add New Scooter")
+        print("22. Update Scooter Info")
+        print("23. Delete Scooter")
+        print("24. Search Scooter")
