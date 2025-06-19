@@ -22,7 +22,6 @@ class ScooterHandler:
         brand = input("Scooter Brand: ")
         model = input("Scooter Model: ")
 
-        # Validate top speed
         while True:
             top_speed = input("Top Speed (km/h): ")
             try:
@@ -31,7 +30,6 @@ class ScooterHandler:
             except ValueError:
                 print("Please enter a valid number for top speed (e.g. 75).")
 
-        # Validate battery capacity
         while True:
             battery_capacity = input("Battery Capacity (Wh): ")
             try:
@@ -40,7 +38,6 @@ class ScooterHandler:
             except ValueError:
                 print("Please enter a valid number for battery capacity (e.g. 200).")
 
-        # Validate state of charge
         while True:
             state_of_charge = input("State of Charge (%): ")
             try:
@@ -49,19 +46,20 @@ class ScooterHandler:
             except ValueError:
                 print("Please enter a valid number for state of charge (e.g. 80).")
 
-        # Validate target_range_input
         while True:
             target_range_input = input("Target Range SoC (min,max %) (e.g. 50,80): ")
             parts = [p.strip() for p in target_range_input.split(',')]
-            if len(parts) == 2 and all(p.isdigit() for p in parts):
+            if len(parts) == 2 and all(p.replace('.', '', 1).isdigit() for p in parts):
                 target_min_soc, target_max_soc = parts
                 break
             else:
                 print("Please enter two numbers separated by a comma, e.g. 50,80.")
 
-        # Validate location_input
         while True:
-            location_input = input("Location (lat, long (5 dec)): ")
+            location_input = input("Location (lat,long) (5 decimals): ")
+            if location_input == "":
+                lat_str = long_str = ""
+                break
             parts = [p.strip() for p in location_input.split(',')]
             if len(parts) == 2:
                 lat_str, long_str = parts
@@ -70,11 +68,10 @@ class ScooterHandler:
                     float(long_str)
                     break
                 except ValueError:
-                    print("Latitude and longitude must be valid numbers (e.g. 51.9225, 4.47917).")
+                    print("Latitude and longitude must be valid numbers (e.g. 51.92250, 4.47917) or leave empty to skip.")
             else:
-                print("Please enter latitude and longitude separated by a comma (e.g. 51.9225, 4.47917).")
+                print("Please enter latitude and longitude separated by a comma (e.g. 51.92250, 4.47917) or leave empty to skip.")
 
-        # Validate out_of_service_status
         while True:
             out_of_service_status = input("Out of Service (0/1): ")
             if out_of_service_status in ("0", "1"):
@@ -82,7 +79,6 @@ class ScooterHandler:
             else:
                 print("Please enter 0 (in service) or 1 (out of service).")
 
-        # Validate mileage
         while True:
             mileage = input("Mileage (km): ")
             try:
@@ -177,15 +173,29 @@ class ScooterHandler:
         mileage = input("Mileage (km): ")
         last_maintenance_date = input("Last Maintenance (YYYY-MM-DD): ")
 
-        lat_str, long_str = location_input.split(',')
-        target_min_soc, target_max_soc = target_range_input.split(',')
+        while True:
+            location_input = input("Location (lat,long) (5 decimals): ")
+            if location_input == "":
+                lat_str = long_str = ""
+                break
+            parts = [p.strip() for p in location_input.split(',')]
+            if len(parts) == 2:
+                lat_str, long_str = parts
+                try:
+                    float(lat_str)
+                    float(long_str)
+                    break
+                except ValueError:
+                    print("Latitude and longitude must be valid numbers (e.g. 51.92250, 4.47917) or leave empty to skip.")
+            else:
+                print("Please enter latitude and longitude separated by a comma (e.g. 51.92250, 4.47917) or leave empty to skip.")
 
         newinfo = {
             'serial_number': serialnumber,
             'soc': state_of_charge,
             'soc_range': {
                 'target_min_soc': target_min_soc,
-                'target_max_soc': target_max_soc
+                'target_max_soc': target_max_socy
             },
             'location': {
                 'latitude': lat_str,
