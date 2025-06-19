@@ -146,11 +146,61 @@ class ScooterHandler:
             print(f"Couldn't add scooter. Error: {e}")
             self.logger.writelog(username, "Add Scooter Failed", f"Error: {e}", issuspicious=True)
 
-    def updatescooterlimit(self, serialnumber, newinfo, username):
-        print(f"\nUpdating Scooter Info (Limited for Service Engineer) for Serial: {serialnumber}")
+    def updatescooterlimit(self, username):
+        all_scooters = self.db_handler.getdata('scooters')
 
-        if not self.db_handler:
-            print("Error: Database not connected. Can't update scooter.")
+        if not all_scooters:
+            print("No scooters found.")
+            return
+
+        print("\n--- List of Scooters ---")
+        for idx, scooter in enumerate(all_scooters, start=1):
+            print(f"{idx}. Serial: {scooter['serial_number']} | {scooter['brand']} {scooter['model']} | Top Speed: {scooter['top_speed']} km/h | SoC: {scooter['soc']}%")
+
+        while True:
+            try:
+                choice = int(input("Select a scooter by number: "))
+                if 1 <= choice <= len(all_scooters):
+                    selected_scooter = all_scooters[choice - 1]
+                    serialnumber = selected_scooter['serial_number']
+                    break
+                else:
+                    print(f"Please enter a number between 1 and {len(all_scooters)}.")
+            except ValueError:
+                print("Invalid input. Please enter a number.")
+
+        print(f"\n--- Updating Scooter (Service Engineer Mode): {serialnumber} ---")
+        state_of_charge = input("State of Charge (%): ")
+        target_range_input = input("Target Range SoC (min,max (%)): ")
+        location_input = input("Location (lat,long) (5 decimals): ")
+        out_of_service_status = input("Out of Service (0/1): ")
+        mileage = input("Mileage (km): ")
+        last_maintenance_date = input("Last Maintenance (YYYY-MM-DD): ")
+
+        lat_str, long_str = location_input.split(',')
+        target_min_soc, target_max_soc = target_range_input.split(',')
+
+        newinfo = {
+            'serial_number': serialnumber,
+            'soc': state_of_charge,
+            'soc_range': {
+                'target_min_soc': target_min_soc,
+                'target_max_soc': target_max_soc
+            },
+            'location': {
+                'latitude': lat_str,
+                'longitude': long_str
+            },
+            'out_of_service': out_of_service_status,
+            'mileage': mileage,
+            'last_maintenance': last_maintenance_date
+        }
+
+        try:
+            cleaned_data = self.input_handler.handle_scooter_data_limit(newinfo, username)
+        except ValueError as ve:
+            print(f"Validation error during cleaning: {ve}. Update cancelled.")
+            self.logger.writelog(username, "Update Scooter Failed", f"Validation error for scooter '{serialnumber}': {ve}", is_suspicious=True)
             return
 
         existing_scooter = self.db_handler.getdata('scooters', {'serial_number': serialnumber})
@@ -159,47 +209,43 @@ class ScooterHandler:
             self.logger.writelog(username, "Update Scooter Failed", f"Scooter '{serialnumber}' not found for SE update", is_suspicious=True)
             return
 
-        allowed_fields = ['soc', 'location', 'out_of_service', 'mileage', 'last_maintenance']
-        updates_for_db = {}
         originalvalues = existing_scooter[0]
+        updates_for_db = {}
 
-        for key, value in newinfo.items():
-            if key not in allowed_fields:
-                print(f"Service Engineers are not allowed to change '{key}'. Skipping this field.")
-                self.logger.writelog(username, "Update Scooter Failed",
-                                f"SE tried to change forbidden field '{key}' on '{serialnumber}'", is_suspicious=True)
-                continue
-
-            try:
-                if key == 'soc':
-                    cleaned = self.input_handler.clean_soc(value)
-                elif key == 'location':
-                    lat = value.get("latitude", 0.0)
-                    lon = value.get("longitude", 0.0)
-                    cleaned = self.input_handler.clean_location(lat, lon)
-                elif key == 'out_of_service':
-                    cleaned = self.input_handler.clean_out_of_service(value)
-                elif key == 'mileage':
-                    cleaned = self.input_handler.clean_mileage(value)
-                elif key == 'last_maintenance':
-                    cleaned = self.input_handler.clean_last_maintenance_date(value)
-                else:
-                    cleaned = value
-            except ValueError as ve:
-                print(f"Validation error for '{key}': {ve}. Update cancelled.")
-                self.logger.writelog(username, "Update Scooter Failed", f"Invalid value for '{key}' on scooter '{serialnumber}'", is_suspicious=True)
-                continue
-
+        for key in cleaned_data:
             if key == 'location':
-                old_loc = originalvalues.get('location', {})
-                if round(old_loc.get('latitude', 0), 5) != cleaned['latitude'] or round(old_loc.get('longitude', 0), 5) != cleaned['longitude']:
-                    updates_for_db[key] = cleaned
+                old_loc_str = originalvalues.get('location', '')
+                try:
+                    old_lat, old_lon = map(lambda x: round(float(x), 5), old_loc_str.split(','))
+                    new_lat, new_lon = map(lambda x: round(float(x), 5), cleaned_data[key].split(','))
+
+                    if old_lat != new_lat or old_lon != new_lon:
+                        updates_for_db[key] = cleaned_data[key]
+                    else:
+                        print(f"'{key}' is the same. No update needed.")
+                except Exception as e:
+                    print(f"Error comparing location: {e}")
+
+            elif key == 'soc_range':
+                old_range_str = originalvalues.get('soc_range', '')
+                try:
+                    old_min, old_max = map(int, old_range_str.split('-'))
+                    new_min, new_max = map(int, cleaned_data[key].split('-'))
+
+                    if old_min != new_min or old_max != new_max:
+                        updates_for_db[key] = cleaned_data[key]
+                    else:
+                        print(f"'{key}' is the same. No update needed.")
+                except Exception as e:
+                    print(f"Error comparing soc_range: {e}")
+
+            else:
+                old_value = str(originalvalues.get(key, '')).strip()
+                new_value = str(cleaned_data[key]).strip()
+                if old_value != new_value:
+                    updates_for_db[key] = cleaned_data[key]
                 else:
                     print(f"'{key}' is the same. No update needed.")
-            elif str(originalvalues.get(key, '')).strip() != str(cleaned).strip():
-                updates_for_db[key] = cleaned
-            else:
-                print(f"'{key}' is the same. No update needed.")
 
         if not updates_for_db:
             print("No valid or changed information to update.")
@@ -213,7 +259,8 @@ class ScooterHandler:
             print(f"Error while updating scooter '{serialnumber}': {e}")
             self.logger.writelog(username, "Update Scooter Failed", f"Database error: {e}", is_suspicious=True)
 
-    def update_scooter(self, serialnumber, newinfo,username):
+
+    def update_scooter(self, username):
         all_scooters = self.db_handler.getdata('scooters')
 
         if not all_scooters:
@@ -239,6 +286,7 @@ class ScooterHandler:
         print(f"\n--- Updating Scooter: {serialnumber} ---")
         brand = input("Scooter Brand: ")
         model = input("Scooter Model: ")
+        serial_number = input("Serial Number: ")
         top_speed = input("Top Speed (km/h): ")
         battery_capacity = input("Battery Capacity (Wh): ")
         state_of_charge = input("State of Charge (%): ")
@@ -252,7 +300,7 @@ class ScooterHandler:
         target_min_soc, target_max_soc = target_range_input.split(',')
 
         newinfo = {
-            'serial_number': serialnumber,
+            'serial_number': serial_number,
             'brand': brand,
             'model': model,
             'top_speed': top_speed,
@@ -272,7 +320,7 @@ class ScooterHandler:
         }
 
         try:
-            cleaned_data = self.input_handler.handle_scooter_data(newinfo, username)
+            cleaned_data = self.input_handler.handle_scooter_data(newinfo)
         except ValueError as ve:
             print(f"Validation error during cleaning: {ve}. Update cancelled.")
             self.logger.writelog(username, "Update Scooter Failed", f"Validation error for scooter '{serialnumber}': {ve}", is_suspicious=True)
@@ -287,26 +335,42 @@ class ScooterHandler:
         originalvalues = existing_scooter[0]
         updates_for_db = {}
 
-        for key, cleaned_value in cleaned_data.items():
+        for key in cleaned_data:
             if key == 'location':
-                old_loc = originalvalues.get('location', {})
-                if (round(float(old_loc.get('latitude', 0)), 5) != float(cleaned_value['latitude']) or
-                    round(float(old_loc.get('longitude', 0)), 5) != float(cleaned_value['longitude'])):
-                    updates_for_db[key] = cleaned_value
-                else:
-                    print(f"'{key}' is the same. No update needed.")
+                old_loc_str = originalvalues.get('location', '')
+                try:
+                    old_lat, old_lon = map(lambda x: round(float(x), 5), old_loc_str.split(','))
+                    new_lat, new_lon = map(lambda x: round(float(x), 5), cleaned_data[key].split(','))
+
+                    if old_lat != new_lat or old_lon != new_lon:
+                        updates_for_db[key] = cleaned_data[key]
+                    else:
+                        print(f"'{key}' is the same. No update needed.")
+                except Exception as e:
+                    print(f"Error comparing location: {e}")
+
             elif key == 'soc_range':
-                old_range = originalvalues.get('soc_range', {})
-                if (int(old_range.get('target_min_soc', 0)) != int(cleaned_value['target_min_soc']) or
-                    int(old_range.get('target_max_soc', 0)) != int(cleaned_value['target_max_soc'])):
-                    updates_for_db[key] = cleaned_value
-                else:
-                    print(f"'{key}' is the same. No update needed.")
+                old_range_str = originalvalues.get('soc_range', '')
+                try:
+                    old_min, old_max = map(int, old_range_str.split('-'))
+                    new_min, new_max = map(int, cleaned_data[key].split('-'))
+
+                    if old_min != new_min or old_max != new_max:
+                        updates_for_db[key] = cleaned_data[key]
+                    else:
+                        print(f"'{key}' is the same. No update needed.")
+                except Exception as e:
+                    print(f"Error comparing soc_range: {e}")
+
             else:
-                if str(originalvalues.get(key, '')).strip() != str(cleaned_value).strip():
-                    updates_for_db[key] = cleaned_value
+                old_value = str(originalvalues.get(key, '')).strip()
+                new_value = str(cleaned_data[key]).strip()
+                if old_value != new_value:
+                    updates_for_db[key] = cleaned_data[key]
                 else:
                     print(f"'{key}' is the same. No update needed.")
+
+
 
         if not updates_for_db:
             print("No valid or changed information to update.")
@@ -320,6 +384,43 @@ class ScooterHandler:
             print(f"Error while updating scooter '{serialnumber}': {e}")
             self.logger.writelog(username, "Update Scooter Failed", f"Database error: {e}", is_suspicious=True)
 
+    def delete_scooter(self, username):
+        all_scooters = self.db_handler.getdata('scooters')
+
+        if not all_scooters:
+            print("No scooters found.")
+            return
+
+        print("\n--- List of Scooters ---")
+        for idx, scooter in enumerate(all_scooters, start=1):
+            print(f"{idx}. Serial: {scooter['serial_number']} | {scooter['brand']} {scooter['model']} | SoC: {scooter['soc']}%")
+
+        while True:
+            try:
+                choice = int(input("Select a scooter to delete by number: "))
+                if 1 <= choice <= len(all_scooters):
+                    selected_scooter = all_scooters[choice - 1]
+                    serialnumber = selected_scooter['serial_number']
+                    break
+                else:
+                    print(f"Please enter a number between 1 and {len(all_scooters)}.")
+            except ValueError:
+                print("Invalid input. Please enter a number.")
+
+        confirm = input(f"Are you sure you want to delete scooter '{serialnumber}'? This cannot be undone (yes/no): ").strip().lower()
+        if confirm != 'yes':
+            print("Deletion cancelled.")
+            self.logger.writelog(username, "Delete Scooter Cancelled", f"Cancelled deletion of scooter '{serialnumber}'.")
+            return
+
+        try:
+            self.db_handler.deleterecord('scooters', 'serial_number', serialnumber)
+            print(f"Scooter with serial number '{serialnumber}' has been deleted.")
+            self.logger.writelog(username, "Delete Scooter", f"Scooter '{serialnumber}' deleted from database.")
+        except Exception as e:
+            print(f"Error while deleting scooter '{serialnumber}': {e}")
+            self.logger.writelog(username, "Delete Scooter Failed", f"Database error while deleting scooter '{serialnumber}': {e}", is_suspicious=True)
+
 
     def search_scooter(self, query, username):
         print(f"\nSearching Scooters for: '{query}'")
@@ -331,7 +432,7 @@ class ScooterHandler:
         SEARCH_FIELDS = {
             'serial_number': 'Serial Number',
             'brand': 'Brand',
-            'model': 'Model',
+            'mo ': 'Model',
         }
 
         all_scooters = self.db_handler.getdata('scooters')

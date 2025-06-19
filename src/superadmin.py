@@ -626,11 +626,14 @@ class SuperAdministrator(User):
     def addscooter(self):
         self.scooter_handler.add_scooter(self.username)
 
-    def updatescooter(self, serialnumber, newinfo, serviceengineer=False):
-        self.scooter_handler.update_scooter(serialnumber, newinfo, self.username)
+    def updatescooter(self):
+        if self.role == "ServiceEngineer":
+            self.scooter_handler.updatescooterlimit(self.username)
+        else:
+            self.scooter_handler.update_scooter(self.username)
 
-    def deletescooter(self, serialnumber):
-        self.scooter_handler.delete_scooter(serialnumber, self.username)
+    def deletescooter(self):
+        self.scooter_handler.delete_scooter(self.username)
 
     def getscooterinfo(self, query):
         return self.scooter_handler.search_scooter(query, self.username)
@@ -777,24 +780,10 @@ class SuperAdministrator(User):
             self.addscooter()
 
         elif choice == '20':
-            sn = input("Scooter Serial Number to update: ")
-            data = {}
-            print("Enter new values (leave empty to skip):")
-            soc = input("New SoC (%): ")
-            if soc: data['state_of_charge'] = float(soc)
-            loc = input("New Location (lat,long): ")
-            if loc: data['location'] = loc
-            oos = input("Out of Service (0/1): ")
-            if oos: data['out_of_service_status'] = int(oos)
-            mil = input("New Mileage (km): ")
-            if mil: data['mileage'] = float(mil)
-            lmd = input("New Last Maintenance Date (YYYY-MM-DD): ")
-            if lmd: data['last_maintenance_date'] = lmd
-            self.updatescooter(sn, data, serviceengineer=False)
+            self.updatescooter()
 
         elif choice == '21':
-            sn = input("Scooter Serial Number to delete: ")
-            self.deletescooter(sn)
+            self.deletescooter()
         else:
             print("That's not a valid option. Please try again.")
 

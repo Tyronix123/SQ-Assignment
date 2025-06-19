@@ -227,7 +227,24 @@ class InputHandler:
             "mileage":               self.clean_mileage(data.get("mileage", 0)),
             "last_maintenance": self.clean_last_maintenance_date(data.get("last_maintenance", ""))
         }
+    
+    def handle_scooter_data_limit(self, data: dict) -> dict:
+        location_dict = data.get("location", {"latitude": 0.0, "longitude": 0.0})
+        lat_str = str(location_dict.get("latitude", 0.0))
+        long_str = str(location_dict.get("longitude", 0.0))
 
+        target_range = data.get("soc_range", {"target_min_soc": 0, "target_max_soc": 100})
+        target_min_soc = target_range.get("target_min_soc", 0)
+        target_max_soc = target_range.get("target_max_soc", 100)
+
+        return {
+            "soc":                   self.clean_soc(data.get("soc", 0)),
+            "soc_range":      self.clean_target_soc_range(target_min_soc, target_max_soc),
+            "location":              self.clean_location(lat_str, long_str),
+            "out_of_service":        self.clean_out_of_service(data.get("out_of_service", False)),
+            "mileage":               self.clean_mileage(data.get("mileage", 0)),
+            "last_maintenance": self.clean_last_maintenance_date(data.get("last_maintenance", ""))
+        }
 
 
     def handle_user_data(self, data: dict) -> dict:
