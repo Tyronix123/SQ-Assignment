@@ -51,10 +51,10 @@ class SuperAdministrator(User):
             except ValueError as e:
                 print(f"Fout: {e}")
                 print("Voer de gegevens opnieuw in.\n")
-                username = input("Gebruikersnaam: ")
-                password = input("Wachtwoord: ")
-                firstname = input("Voornaam: ")
-                lastname = input("Achternaam: ")
+                username = input("Username (8-10 chars, must start with a letter or _, allowed: a-z, 0-9, _, ', .): ")
+                password = input("Password (12-30 chars, must include lowercase, uppercase, digit, special char: ")
+                firstname = input("First name: ")
+                lastname = input("Last name: ")
 
         username = validated_user_data["username"]
         password = validated_user_data["password"]
@@ -632,15 +632,15 @@ class SuperAdministrator(User):
 
     def handle_menu_choice(self, choice):
         if choice == '3':
-            u = input("New System Admin Username: ")
-            p = input("New System Admin Password: ")
+            u = input("New System Admin Username (8-10 chars, must start with a letter or _, allowed: a-z, 0-9, _, ', .): ")
+            p = input("New System Admin Password (12-30 chars, must include lowercase, uppercase, digit, special char): ")
             f = input("New System Admin First Name: ")
             l = input("New System Admin Last Name: ")
             self.addsystemadmin(u, p, f, l)
 
         elif choice == '4':
             u = input("Username of System Admin to update: ")
-            new_u = input("New Username (leave empty to skip): ")
+            new_u = input("New Username (leave empty to skip, (8-10 chars, must start with a letter or _, allowed: a-z, 0-9, _, ', .)): ")
             new_f = input("New First Name (leave empty to skip): ")
             new_l = input("New Last Name (leave empty to skip): ")
             
@@ -657,7 +657,7 @@ class SuperAdministrator(User):
 
         elif choice == '6':
             u = input("Username of System Admin to reset password: ")
-            new_p = input("New password for System Admin: ")
+            new_p = input("New password for System Admin (12-30 chars, must include lowercase, uppercase, digit, special char): ")
             self.resetpasswordsysadmin(u, new_p)
 
         elif choice == '7':
@@ -668,8 +668,8 @@ class SuperAdministrator(User):
             self.revokerestorecode()
 
         elif choice == '9':
-            u = input("New Service Engineer Username: ")
-            p = input("New Service Engineer Password: ")
+            u = input("New Service Engineer Username (must be between 8-10 char): ")
+            p = input("New Service Engineer Password (12-30 characters, must include lowercase, uppercase, digit, special character): ")
             f = input("New Service Engineer First Name: ")
             l = input("New Service Engineer Last Name: ")
             self.addserviceengineer(u, p, f, l)
@@ -678,7 +678,7 @@ class SuperAdministrator(User):
             u = input("Username of Service Engineer to update: ")
             nf = input("New First Name (leave empty to skip): ")
             nl = input("New Last Name (leave empty to skip): ")
-            nu = input("New Username (leave empty to skip): ")
+            nu = input("New Username (leave empty to skip, 8-10 chars, must start with a letter or _, allowed: a-z, _, ', .): ")
             data = {}
             if nf: data['first_name'] = nf
             if nl: data['last_name'] = nl
@@ -691,7 +691,7 @@ class SuperAdministrator(User):
 
         elif choice == '12':
             u = input("Username of Service Engineer to reset password: ")
-            np = input("New password for Service Engineer: ")
+            np = input("New password for Service Engineer (12-30 chars, must include lowercase, uppercase, digit, special char): ")
             self.resetengineerpassword(u, np)
 
         elif choice == '13':
