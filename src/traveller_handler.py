@@ -63,67 +63,91 @@ class TravellerHandler:
             print(f"Couldn't add traveller. Error: {e}")
             self.logger.writelog(username, "Add Traveller Failed", f"Error: {e}", issuspicious=True)
 
-    def update_traveller(self, customer_id, new_info, username):
-        print(f"\nUpdating Traveller Info for ID: {customer_id}")
-        
-        if not self.db_handler:
-            print("Error: Database not connected. Can't update traveller.")
+    def update_traveller(self, username):
+        all_travellers = self.db_handler.getdata('travellers')
+
+        if not all_travellers:
+            print("No travellers found.")
             return
 
-        existing_traveller = self.db_handler.getdata('travellers', {'customer_id': customer_id})
-        if not existing_traveller:
-            print(f"Error: Traveller with ID '{customer_id}' not found.")
-            self.logger.writelog(username, "Update Traveller Failed", 
-                            f"Traveller '{customer_id}' not found", issuspicious=True)
-            return
-
-        original_values = existing_traveller[0]
+        print("\n--- List of Travellers ---")
+        for idx, traveller in enumerate(all_travellers, start=1):
+            print(f"{idx}. ID: {traveller['customer_id']} | Name: {traveller['first_name']} {traveller['last_name']} | Email: {traveller['email']}")
 
         try:
-            cleaned_data = self.input_handler.handle_traveller_data(new_info)
-        except ValueError as ve:
-            print(f"Validation error: {ve}. Update cancelled.")
-            self.logger.writelog(username, "Update Traveller Failed",
-                            f"Validation error for traveller '{customer_id}': {ve}", issuspicious=True)
+            choice = int(input("\nSelect a traveller by number to update: ")) - 1
+            if choice < 0 or choice >= len(all_travellers):
+                print("Invalid selection.")
+                return
+        except ValueError:
+            print("Invalid input.")
             return
 
-        updates_for_db = {}
-        for key, cleaned_value in cleaned_data.items():
-            original_value = original_values.get(key, '')
-            
-            if self.input_validation.is_valid_phone(cleaned_value):
-                cleaned_value = "+31-6-" + cleaned_value
-                
-            if str(original_value).strip() != str(cleaned_value).strip():
-                updates_for_db[key] = cleaned_value
+        selected_traveller = all_travellers[choice]
+        cid = selected_traveller['customer_id']
+
+        data = {}
+        print("\nEnter new values (leave empty to skip):")
+        em = input("New Email: ")
+        if em:
+            data['email'] = em
+
+        ph = input("New Mobile Phone (8 digits): ")
+        if ph:
+            if self.input_validation.is_valid_phone(ph):
+                data['mobile_phone'] = "+31-6-" + ph
             else:
-                print(f"'{key}' is the same. No update needed.")
+                print("Invalid phone format. Skipping update for phone.")
 
-        if not updates_for_db:
-            print("No valid or changed information to update.")
+        zp = input("New Zip Code: ")
+        if zp:
+            data['zip_code'] = zp
+
+        ct = input(f"New City (choose from {', '.join(self.dutch_cities)}): ")
+        if ct:
+            data['city'] = ct
+
+        if not data:
+            print("No updates provided.")
             return
 
-        try:
-            self.db_handler.updateexistingrecord('travellers', 'customer_id', customer_id, updates_for_db)
-            print(f"Traveller with ID '{customer_id}' successfully updated.")
-            self.logger.writelog(username, "Update Traveller",
-                            f"Updated fields for traveller '{customer_id}': {', '.join(updates_for_db.keys())}")
-        except Exception as e:
-            print(f"Error while updating traveller '{customer_id}': {e}")
-            self.logger.writelog(username, "Update Traveller Failed",
-                            f"Database error for traveller '{customer_id}': {e}", issuspicious=True)
+        self.db_handler.updateexistingrecord('travellers', 'customer_id', cid, data)
+        print("Traveller information updated successfully.")
 
-    def delete_traveller(self, customer_id, username):
-        print(f"\nDeleting Traveller with ID: {customer_id}")
+        self.logger.writelog(
+            username,
+            "Update Traveller",
+            f"Updated traveller ID '{cid}' with new data: {data}"
+        )
+
+
+    def delete_traveller(self, username):
         if not self.db_handler:
             print("Error: Database is not connected. Can't delete traveller.")
             return
 
-        existing_traveller = self.db_handler.getdata('travellers', {'customer_id': customer_id})
-        if not existing_traveller:
-            print(f"Error: Traveller with ID '{customer_id}' not found.")
-            self.logger.writelog(username, "Delete Traveller Failed", f"Traveller '{customer_id}' not found", issuspicious=True)
+        travellers = self.db_handler.getdata('travellers')
+        if not travellers:
+            print("No travellers found in the system.")
             return
+
+        print("\n--- Travellers ---")
+        for idx, t in enumerate(travellers, start=1):
+            print(f"{idx}. ID: {t['customer_id']} | "
+                f"{t['first_name']} {t['last_name']} | "
+                f"{t['email']}")
+
+        try:
+            choice = int(input("\nSelect traveller number to delete: ")) - 1
+            if choice < 0 or choice >= len(travellers):
+                print("Invalid selection.")
+                return
+        except ValueError:
+            print("Invalid input.")
+            return
+
+        target = travellers[choice]
+        customer_id = target['customer_id']
 
         confirmation = input(
             f"Are you sure you want to delete traveller '{customer_id}'? This cannot be undone! (type 'yes' to confirm): ").lower()
