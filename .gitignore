@@ -1,0 +1,9 @@
+src/backup/
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite_bak
+.env
+.vscode/
