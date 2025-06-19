@@ -756,7 +756,7 @@ class SuperAdministrator(User):
                 'first_name': input("Traveller First Name: "),
                 'last_name':  input("Traveller Last Name: "),
                 'birthday':   input("Traveller Birthday (YYYY-MM-DD): "),
-                'gender':     input("Traveller Gender: "),
+                'gender':     input("Traveller Gender (Male/Female): "),
                 'street_name':input("Traveller Street Name: "),
                 'house_number':input("Traveller House Number: "),
                 'zip_code':   input("Traveller Zip Code (DDDDXX): "),
