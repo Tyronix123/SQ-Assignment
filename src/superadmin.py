@@ -62,8 +62,8 @@ class SuperAdministrator(User):
         lastname = validated_user_data["last_name"]
         role = validated_user_data["role"]
 
-        existing_user = self.db_handler.getdata('users', {'username': username})
-        if existing_user:
+        all_users = self.db_handler.getdata('users')
+        if any(u['username'].lower() == username.lower() for u in all_users):
             print(f"Username: '{username}' is already taken. Please pick a different one.")
             self.logger.writelog(self.username, f"{role} creation Failed", f"Username '{username}' already in use", issuspicious=True)
             return False
@@ -114,7 +114,7 @@ class SuperAdministrator(User):
                 decrypted_username = self.db_handler.decryptdata(user['username'])
             except Exception:
                 continue
-            if decrypted_username == usernametochange and user['role'] == role:
+            if decrypted_username.lower() == usernametochange.lower() and user['role'] == role:
                 target_user = user
                 break
 
@@ -133,7 +133,7 @@ class SuperAdministrator(User):
                 new_username = self.input_handler.clean_username(newinfo['username'])
 
                 all_users = self.db_handler.getdata('users')
-                if any(u['username'] == new_username for u in all_users):
+                if any(u['username'].lower() == new_username.lower() for u in all_users):
                     print(f"Error: Username '{new_username}' already exists.")
                     self.logger.writelog(self.getmyusername(), f"Update {role} Failed",
                                         f"Duplicate username '{new_username}'", issuspicious=True)
@@ -182,7 +182,7 @@ class SuperAdministrator(User):
         for user in all_users_raw:
             try:
                 decrypted_username = self.db_handler.decryptdata(user['username'])
-                if decrypted_username == username_to_delete and user.get('role') == role:
+                if decrypted_username.lower() == username_to_delete.lower() and user.get('role') == role:
                     target_user = user
                     break
             except Exception:
@@ -225,7 +225,7 @@ class SuperAdministrator(User):
         target_user = None
 
         for user in all_users:
-            if user['username'] == username_reset and user['role'] == role:
+            if user['username'].lower() == username_reset.lower() and user['role'] == role:
                 target_user = user
                 break
 
@@ -317,7 +317,7 @@ class SuperAdministrator(User):
         for user in all_users_raw:
             try:
                 uname = self.db_handler.decryptdata(user['username'])
-                if uname == sysadminusername and user.get('role') == 'SystemAdministrator':
+                if uname.lower() == sysadminusername.lower() and user.get('role') == 'SystemAdministrator':
                     target_user_raw = user
                     break
             except Exception:
