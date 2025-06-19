@@ -174,9 +174,29 @@ class SuperAdministrator(User):
             return False
 
         if username_to_delete == self.username:
-            print(self_deletion_message)
-            self.logger.writelog(self.username, f"Delete {role} Failed", f"Tried to delete self ({username_to_delete})", issuspicious=True)
-            return False
+            print("You are deleting your own account. This will log you out and permanently remove access.")
+            confirm = input("Are you absolutely sure you want to delete your account? Type 'yes' to confirm: ").strip().lower()
+
+            if confirm == 'yes':
+                self.logger.writelog(
+                    self.username,
+                    f"Delete {role} (Self)",
+                    f"Deleted own account ({username_to_delete}).",
+                    issuspicious=False
+                )
+                self.db_handler.deleterecord('users', 'username', username_to_delete)
+                print("Your account has been deleted.")
+                self.logout()
+                return True
+            else:
+                print("Account deletion cancelled.")
+                self.logger.writelog(
+                    self.username,
+                    f"Delete {role} (Self) Cancelled",
+                    f"Attempt to delete own account ({username_to_delete}) was cancelled by user.",
+                    issuspicious=False
+                )
+                return False
 
         all_users_raw = self.db_handler.getrawdata('users')
         target_user = None
@@ -797,11 +817,9 @@ class SuperAdministrator(User):
         print("5. Delete System Administrator")
         print("6. Reset System Administrator Password")
 
-        print("\n--- Restore Code Management ---")
         print("7. Generate Restore Code for System Admin Backup")
         print("8. Revoke Restore Code")
 
-        print("\n--- Service Engineer Management ---")
         print("9. Add New Service Engineer")
         print("10. Update Service Engineer Info")
         print("11. Delete Service Engineer")
