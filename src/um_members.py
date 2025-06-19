@@ -98,7 +98,7 @@ class UmMembers:
             userlog = []
 
             for user in all_users:
-                if user['username'] == usernameinput:
+                if user['username'].lower() == usernameinput.lower():
                     userlog = [user]
                     break
 
