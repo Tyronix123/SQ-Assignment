@@ -54,9 +54,8 @@ class InputValidation:
         if not any(char.isupper() for char in password): return False
         if not any(char.islower() for char in password): return False
         if not any(char.isdigit() for char in password): return False
-    
-        special_chars = r"[~!@#$%&_\-+=`|\\(){}\[\]:;'<>,.?/]"
-        if not any(char in special_chars for char in password): return False
+        if not re.search(r'[~!@#$%&_\-+=`|\\(){}\[\]:;\'<>,.?/]', password): return False
+
         return True
 
     def is_valid_role(self, role):
