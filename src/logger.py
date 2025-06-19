@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime
 
 class Logger:
     def __init__(self, db_handler):
@@ -10,7 +10,7 @@ class Logger:
             print("Logger cant write, no database connection.")
             return
 
-        currenttime = datetime.datetime.now().isoformat()
+        currenttime = datetime.now().isoformat()
         try:
             self.db_handler.addnewrecord(
                 'logs',
@@ -35,6 +35,7 @@ class Logger:
             return []
         return self.db_handler.getdata('logs')
 
+
     def show_logs_to_admin(self) -> None:
         alllogs = self.getlogs()
         if not alllogs:
@@ -44,8 +45,20 @@ class Logger:
         print("\n--- All System Logs ---")
         for logentry in alllogs:
             suspicioustag = "[SUSPICIOUS] " if logentry.get('suspicious') == 1 else ""
-            print(
-                f"[{logentry.get('time')}] {suspicioustag}{logentry.get('username')}: {logentry.get('activity')} ({logentry.get('details')})")
+
+            raw_time = logentry.get('time')
+            try:
+                parsed_time = datetime.fromisoformat(raw_time)
+                formatted_time = parsed_time.strftime('%d-%m-%Y %H:%M:%S')
+            except Exception:
+                formatted_time = raw_time
+
+            log_line = f"[{formatted_time}] {suspicioustag}{logentry.get('username')}: {logentry.get('activity')}"
+            details = logentry.get('details')
+            if details:
+                log_line += f" ({details})"
+
+            print(log_line)
 
         if self.unseensuspiciouslogs:
             print("\nAll suspicious alerts have been seen by an admin.")

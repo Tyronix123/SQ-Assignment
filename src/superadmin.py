@@ -10,6 +10,8 @@ from scooter_handler import ScooterHandler
 from user import User
 from logger import Logger
 from db_handler import DBHandler
+import zipfile
+
 
 class SuperAdministrator(User):
     def __init__(self, dutch_cities, username, password_hash, role, firstname, lastname, reg_date=None, 
@@ -51,10 +53,10 @@ class SuperAdministrator(User):
             except ValueError as e:
                 print(f"Fout: {e}")
                 print("Voer de gegevens opnieuw in.\n")
-                username = input("Gebruikersnaam: ")
-                password = input("Wachtwoord: ")
-                firstname = input("Voornaam: ")
-                lastname = input("Achternaam: ")
+                username = input("Username (8-10 chars, must start with a letter or _, allowed: a-z, 0-9, _, ', .): ")
+                password = input("Password (12-30 chars, must include lowercase, uppercase, digit, special char: ")
+                firstname = input("First name: ")
+                lastname = input("Last name: ")
 
         username = validated_user_data["username"]
         password = validated_user_data["password"]
@@ -62,8 +64,8 @@ class SuperAdministrator(User):
         lastname = validated_user_data["last_name"]
         role = validated_user_data["role"]
 
-        existing_user = self.db_handler.getdata('users', {'username': username})
-        if existing_user:
+        all_users = self.db_handler.getdata('users')
+        if any(u['username'].lower() == username.lower() for u in all_users):
             print(f"Username: '{username}' is already taken. Please pick a different one.")
             self.logger.writelog(self.username, f"{role} creation Failed", f"Username '{username}' already in use", issuspicious=True)
             return False
@@ -114,7 +116,7 @@ class SuperAdministrator(User):
                 decrypted_username = self.db_handler.decryptdata(user['username'])
             except Exception:
                 continue
-            if decrypted_username == usernametochange and user['role'] == role:
+            if decrypted_username.lower() == usernametochange.lower() and user['role'] == role:
                 target_user = user
                 break
 
@@ -133,7 +135,7 @@ class SuperAdministrator(User):
                 new_username = self.input_handler.clean_username(newinfo['username'])
 
                 all_users = self.db_handler.getdata('users')
-                if any(u['username'] == new_username for u in all_users):
+                if any(u['username'].lower() == new_username.lower() for u in all_users):
                     print(f"Error: Username '{new_username}' already exists.")
                     self.logger.writelog(self.getmyusername(), f"Update {role} Failed",
                                         f"Duplicate username '{new_username}'", issuspicious=True)
@@ -182,7 +184,7 @@ class SuperAdministrator(User):
         for user in all_users_raw:
             try:
                 decrypted_username = self.db_handler.decryptdata(user['username'])
-                if decrypted_username == username_to_delete and user.get('role') == role:
+                if decrypted_username.lower() == username_to_delete.lower() and user.get('role') == role:
                     target_user = user
                     break
             except Exception:
@@ -225,7 +227,7 @@ class SuperAdministrator(User):
         target_user = None
 
         for user in all_users:
-            if user['username'] == username_reset and user['role'] == role:
+            if user['username'].lower() == username_reset.lower() and user['role'] == role:
                 target_user = user
                 break
 
@@ -292,77 +294,79 @@ class SuperAdministrator(User):
     def resetpasswordsysadmin(self, usernamereset, newpassword):
         self._reset_password(usernamereset, newpassword, "SystemAdministrator")
 
-    def createrestorecode(self, sysadminusername: str):
-        print(f"\nGenerating Restore Code for System Administrator: {sysadminusername}")
+    def createrestorecode(self, target_username: str):
+        print(f"\nGenerating Restore Code for Administrator: {target_username}")
 
         if not self.db_handler:
-            print("Error: Database not connected. Can't generate restore code.")
+            print("Error: Database not connected.")
             return "ERROR"
 
         all_users_raw = self.db_handler.getrawdata('users')
-        target_user_raw = None
-        creator_user_raw = None
+        creator_raw   = None
+        target_raw    = None
 
-        
-        for user in all_users_raw:
+        for row in all_users_raw:
             try:
-                uname = self.db_handler.decryptdata(user['username'])
-                if uname == self.username:
-                    creator_user_raw = user
-                    break
+                uname = self.db_handler.decryptdata(row['username'])
             except Exception:
                 continue
 
+            if uname == self.username:
+                creator_raw = row
+            if uname == target_username:
+                target_raw  = row
 
-        for user in all_users_raw:
-            try:
-                uname = self.db_handler.decryptdata(user['username'])
-                if uname == sysadminusername and user.get('role') == 'SystemAdministrator':
-                    target_user_raw = user
-                    break
-            except Exception:
-                continue
-
-        if not target_user_raw:
-            print(f"Error: System Administrator '{sysadminusername}' not found or wrong role.")
-            self.logger.writelog(self.getmyusername(),
-                                "Generate Restore Code Failed",
-                                f"Target '{sysadminusername}' not found / wrong role",
-                                issuspicious=True)
+        if not creator_raw:
+            print("Creator record not found – DB inconsistent.")
             return "ERROR"
 
-        restore_code  = secrets.token_urlsafe(16)
-        backup_id     = secrets.token_hex(8)
-        expiry_date   = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
+        allowed_roles = {"SystemAdministrator", "SuperAdministrator"}
+        if not target_raw or target_raw["role"] not in allowed_roles:
+            print(f"Error: '{target_username}' is not an eligible administrator.")
+            self.logger.writelog(
+                self.getmyusername(),
+                "Generate Restore Code Failed",
+                f"'{target_username}' ineligible for restore‑code",
+                issuspicious=True,
+            )
+            return "ERROR"
+
+        restore_code = secrets.token_urlsafe(16)
+        backup_id    = secrets.token_hex(8)
+        expiry_date  = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
 
         try:
             self.db_handler.addnewrecord(
-                'restore_codes',
+                "restore_codes",
                 {
-                    'code'           : restore_code,
-                    'backup_id'      : backup_id,
-                    'backup_file_name': None,
-                    'created_by'     : creator_user_raw['username'], 
-                    'for_user'       : target_user_raw['username'],
-                    'expiry_date'    : expiry_date,
-                    'used'           : 0
-                }
+                    "code"            : restore_code,
+                    "backup_id"       : backup_id,
+                    "backup_file_name": None,
+                    "created_by"      : creator_raw["username"],
+                    "for_user"        : target_raw["username"],
+                    "expiry_date"     : expiry_date,
+                    "used"            : 0,
+                },
             )
-            print(f"Restore code for '{sysadminusername}' created.\n"
-                f"Code : {restore_code}\n"
-                f"Valid : until {expiry_date}\n"
-                f"Backup ID : {backup_id}\n"
-                "(one‑time use only)")
-            self.logger.writelog(self.getmyusername(),
-                                "Generate Restore Code",
-                                f"Code generated for '{sysadminusername}', backup ID {backup_id}")
+            print(
+                f"\nRestore‑code created for '{target_username}'.\n"
+                f"  Code       : {restore_code}\n"
+                f"  Backup ID  : {backup_id}\n"
+                f"  Expires    : {expiry_date}\n"
+                "  (one‑time use only)"
+            )
+            self.logger.writelog(
+                self.getmyusername(),
+                "Generate Restore Code",
+                f"Code for '{target_username}', backup ID {backup_id}",
+            )
             return restore_code
 
         except Exception as e:
-            print(f"Could not generate restore code. Error: {e}")
-            self.logger.writelog(self.getmyusername(),
-                                "Generate Restore Code Failed",
-                                str(e), issuspicious=True)
+            print(f"Could not generate restore code: {e}")
+            self.logger.writelog(
+                self.getmyusername(), "Generate Restore Code Failed", str(e), issuspicious=True
+            )
             return "ERROR"
 
 
@@ -431,158 +435,205 @@ class SuperAdministrator(User):
             self.logger.writelog(self.username, "Revoke Code Failed", str(e), issuspicious=True)
             return False
 
-    def makebackup(self, restorecode):
-        print("\nInitiating System Backup")
+    def makebackup(self):
+        print("\n--- Initiating System Backup ---")
+
+        restore_codes = self.db_handler.getdata('restore_codes', {'used': 0})
+        if not restore_codes:
+            print("No available restore codes found.")
+            return
+
+        print("\nAvailable Restore Codes:")
+        for idx, rc in enumerate(restore_codes, start=1):
+            print(
+                f"{idx}. Code: {rc['code']} | For: {self.db_handler.decryptdata(rc['for_user'])} | "
+                f"Created By: {self.db_handler.decryptdata(rc['created_by'])} | Expiry: {rc['expiry_date']}"
+            )
+        try:
+            selected = int(input("\nSelect a restore code by number: ")) - 1
+            if selected < 0 or selected >= len(restore_codes):
+                print("Invalid selection.")
+                return
+            restorecode = restore_codes[selected]['code']
+            restore_for_user = restore_codes[selected]['for_user']
+            is_revoked = restore_codes[selected].get('used', 0)
+        except ValueError:
+            print("Invalid input.")
+            return
+
+        if is_revoked == 1:
+            print("Selected restore code is revoked.")
+            self.logger.writelog(self.username, "Backup Attempt Failed", f"Restore code '{restorecode}' is revoked", issuspicious=True)
+            return
+
+        if self.username != restore_for_user and self.username == 'superadmin':
+            print("Superadmin cannot make a backup for another system administrator.")
+            self.logger.writelog(self.username, "Backup Attempt Failed", f"Unauthorized backup attempt for '{restore_for_user}'", issuspicious=True)
+            return
+
         dbpath = self.db_handler.db_name
-        backupdir = "backup"
-
-        existingtraveller = self.db_handler.getdata('restore_codes', {'code': restorecode})
-        if not existingtraveller:
-            print("No such restore code in system.")
-            self.logger.writelog(self.username, "Attempted restore code usage.", f"Restore code '{restorecode}' not found",
-                            issuspicious=True)
-            return False
-        currentcode = existingtraveller[0]
-        if currentcode.get('is_revoked') == 1:
-            print("Code is already revoked in system.")
-            self.logger.writelog(self.username, "Attempted revoked code usage.", f"Attempted use revoked code '{restorecode}'",
-                            issuspicious=True)
-            return False
-
-        if not os.path.exists(backupdir):
-            try:
-                os.makedirs(backupdir)
-                print(f"Created backup directory: '{backupdir}'")
-            except OSError as e:
-                print(f"Error creating backup directory '{backupdir}': {e}")
-                self.logger.writelog(self.username, "System Backup", f"Failed: Error creating directory - {e}")
-                return False
-
         if not os.path.exists(dbpath):
-            print(f"Error: Database file not found at '{dbpath}'. Backup failed.")
-            self.logger.writelog(self.username, "System Backup", f"Failed: Database file '{dbpath}' not found.")
-            return False
+            print(f"Database not found at '{dbpath}'.")
+            self.logger.writelog(self.username, "Backup Failed", f"Database not found at {dbpath}", issuspicious=True)
+            return
+
+        backupdir = os.path.join("src", "backup")
+        os.makedirs(backupdir, exist_ok=True)
 
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        originaldbfile = os.path.basename(dbpath)
-        backup_filename = f"{os.path.splitext(originaldbfile)[0]}_{timestamp}.sqlite_bak"
+        backup_filename = f"backup_{timestamp}.zip"
         backup_full_path = os.path.join(backupdir, backup_filename)
 
         try:
-            shutil.copy2(dbpath, backup_full_path)
-            self.db_handler.updateexistingrecord('restore_codes', 'code', restorecode,
-                                               {'backup_file_name': backup_filename})
-            print(f"Successfully backed up database '{originaldbfile}' to '{backup_full_path}' using code {restorecode}.")
-            self.logger.writelog(self.username, "System Backup", f"Successful backup to '{backup_full_path}'.")
-            return True
-        except IOError as e:
-            print(f"Error during backup: {e}")
-            self.logger.writelog(self.username, "System Backup", f"Failed: IOError - {e}")
-            return False
+            with zipfile.ZipFile(backup_full_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                zipf.write(dbpath, arcname=os.path.basename(dbpath))
+
+            self.db_handler.updateexistingrecord('restore_codes', 'code', restorecode, {
+                'backup_file_name': backup_filename,
+            })
+
+            print(f"\nBackup completed successfully: {backup_filename}")
+            self.logger.writelog(self.username, "System Backup", f"Backup zip created at '{backup_full_path}' using restore code '{restorecode}'")
         except Exception as e:
-            print(f"An unexpected error occurred during backup: {e}")
-            self.logger.writelog(self.username, "System Backup", f"Failed: Unexpected error - {e}")
-            return False
+            print(f"\nBackup failed: {e}")
+            self.logger.writelog(self.username, "System Backup Failed", f"Exception: {e}", issuspicious=True)
+
+
         
-    def restoresystembackup(self, restore_code, backup_id):
-        print(f"\nRestoring System Backup")
+    def restoresystembackup(self) -> None:
+        print("\n--- Restore a System Backup ---")
+
         if not self.db_handler:
-            print("Error: Database not connected. Can't restore backup.")
-            self.logger.writelog(self.username, "Restore Backup Failed", "Database not connected.")
-            return False
+            print("Error: Database not connected.")
+            self.logger.writelog(self.getmyusername(),
+                                "Restore Backup Failed",
+                                "DB not connected")
+            return
 
-        code_records = self.db_handler.getdata('restore_codes', {'code': restore_code, 'backup_id': backup_id})
-        if not code_records:
-            print("Invalid restore code or backup identifier.")
-            self.logger.writelog(self.username, "Restore Backup Failed", f"Invalid code '{restore_code}' or identifier '{backup_id}'.",
-                            issuspicious=True)
-            return False
+        all_codes = self.db_handler.getdata("restore_codes", {"used": 0})
+        if not all_codes:
+            print("No available restore codes.")
+            return
 
-        code_record = code_records[0]
-        savedbackupfilename = code_record.get('backup_file_name')
-        if not savedbackupfilename:
-            print(f"Error: Restore record for backup identifier '{backup_id}' does not contain the actual backup filename. Restore failed.")
-            self.logger.writelog(self.username, "Restore Backup Failed",
-                            f"Missing 'backup_file_name' in record for identifier '{backup_id}'.")
-            return False
+        user_codes = []
+        today = datetime.date.today()
 
-        if code_record.get('is_revoked') == 1:
-            print("This restore code has already been used.")
-            self.logger.writelog(self.username, "Restore Backup Failed", f"Used/revoked code '{restore_code}'.", issuspicious=True)
-            return False
+        for rc in all_codes:
+            try:
+                code_for_user = self.db_handler.decryptdata(rc["for_user"])
+                if code_for_user != self.username:
+                    continue
 
-        expirydate = code_record.get('expiry_date')
-        if expirydate:
-            expiry_date = datetime.date.fromisoformat(expirydate)
-            if datetime.date.today() > expiry_date:
-                print("This code has expired.")
-                self.logger.writelog(self.username, "Restore Backup Failed", f"Expired code '{restore_code}'.", issuspicious=True)
-                return False
+                expiry = datetime.date.fromisoformat(rc["expiry_date"])
+                if today > expiry:
+                    continue
 
-        self.db_handler.updateexistingrecord('restore_codes', 'code', restore_code, {'is_revoked': 1})
-        print("Restore code is valid. Proceeding with database restore...")
+                user_codes.append(rc)
+            except Exception:
+                continue
 
-        backupdir = "backup"
-        backup_file_to_restore_path = os.path.join(backupdir, savedbackupfilename)
-        currentdbpath = self.db_handler.db_name
-        originaldbname = os.path.basename(currentdbpath)
+        if not user_codes:
+            print("You have no valid restore codes (or all are expired).")
+            return
 
-        if not os.path.exists(backup_file_to_restore_path):
-            print(f"Error: Backup file not found at '{backup_file_to_restore_path}'. Restore failed.")
-            self.logger.writelog(self.username, "Restore Backup Failed",
-                            f"Backup file '{savedbackupfilename}' not found for identifier '{backup_id}'.")
-            return False
-
-        pre_restore_backup_filename = f"{os.path.splitext(originaldbname)[0]}_pre_restore_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.sqlite_bak"
-        pre_restore_backup_path = os.path.join(backupdir, pre_restore_backup_filename)
+        print("\nAvailable Restore Codes:")
+        for idx, rc in enumerate(user_codes, 1):
+            print(
+                f"{idx}. Code: {rc['code']} | "
+                f"Created By: {self.db_handler.decryptdata(rc['created_by'])} | "
+                f"Expiry: {rc['expiry_date']}"
+            )
 
         try:
-            if os.path.exists(currentdbpath):
-                print(f"Creating pre-restore backup of current database to '{pre_restore_backup_path}'...")
-                shutil.copy2(currentdbpath, pre_restore_backup_path)
-                print("Pre-restore backup created successfully.")
-            else:
-                print(f"Current database file '{currentdbpath}' does not exist. Skipping pre-restore backup.")
+            selection = int(input("\nSelect a restore-code by number: ")) - 1
+            if selection not in range(len(user_codes)):
+                print("Invalid selection.")
+                return
+        except ValueError:
+            print("Invalid input.")
+            return
 
-            print(f"Restoring database from '{backup_file_to_restore_path}' to '{currentdbpath}'...")
-            shutil.copy2(backup_file_to_restore_path, currentdbpath)
-            print("Database restore completed successfully.")
-            self.logger.writelog(self.username, "System Backup Restore",
-                            f"Successfully restored system using code '{restore_code}' for identifier '{backup_id}'. "
-                            f"Current database replaced with '{savedbackupfilename}'. "
-                            f"Pre-restore backup of original database saved to '{pre_restore_backup_path}'.")
-            return True
-        except IOError as e:
-            print(f"Error during database restore: {e}")
-            self.logger.writelog(self.username, "System Backup Restore Failed", f"IOError during restore: {e}")
-            print("Restore failed due to IOError. Manual intervention might be required.")
-            return False
+        code_record   = user_codes[selection]
+        restore_code  = code_record["code"]
+        backup_id     = code_record["backup_id"]
+        backup_file   = code_record["backup_file_name"]
+
+        if not backup_file:
+            print("Backup file name missing in restore‑code record.")
+            return
+
+        backup_dir  = os.path.join("src", "backup")
+        backup_path = os.path.join(backup_dir, backup_file)
+        db_path     = self.db_handler.db_name
+
+        if not os.path.exists(backup_path):
+            print(f"Backup file not found at '{backup_path}'.")
+            self.logger.writelog(self.getmyusername(),
+                                "Restore Backup Failed",
+                                f"Missing file {backup_file}")
+            return
+
+        pre_copy = os.path.join(
+            backup_dir,
+            f"pre_restore_{datetime.datetime.now():%Y%m%d_%H%M%S}.db",
+        )
+        try:
+            shutil.copy2(db_path, pre_copy)
+            print(f"Saved current DB to '{pre_copy}'.")
         except Exception as e:
-            print(f"An unexpected error occurred during database restore: {e}")
-            self.logger.writelog(self.username, "System Backup Restore Failed", f"Unexpected error during restore: {e}")
-            print("Restore failed due to unexpected error. Manual intervention might be required.")
-            return False
+            print(f"Could not create pre‑restore copy: {e}")
+            self.logger.writelog(self.getmyusername(),
+                                "Restore Backup Failed",
+                                f"Pre‑copy error {e}")
+            return
+
+        try:
+            with zipfile.ZipFile(backup_path, "r") as zf:
+                zf.extract(os.path.basename(db_path), path=os.path.dirname(db_path))
+
+            print("Marking restore code as used...")    
+            self.db_handler.updateexistingrecord('restore_codes', 'code', restore_code, {
+                'used': 1,
+                'backup_file_name': backup_file
+            })
+
+            print("Database restored successfully.")
+            self.logger.writelog(
+                self.getmyusername(),
+                "Restore Backup",
+                f"Restored from {backup_file} ({backup_id}), "
+                f"pre‑copy at {pre_copy}",
+            )
+        except Exception as e:
+            print(f"Restore failed: {e}")
+            self.logger.writelog(self.getmyusername(),
+                                "Restore Backup Failed",
+                                str(e))
+
 
     def addtraveller(self, travellerinfo):
         self.traveller_handler.add_traveller(travellerinfo, self.username)
 
-    def updatetraveller(self, customerid, newinfo):
-        self.traveller_handler.update_traveller(customerid, newinfo, self.username)
+    def updatetraveller(self):
+        self.traveller_handler.update_traveller(self.username)
 
-    def deletetraveller(self, customerid):
-        self.traveller_handler.delete_traveller(customerid, self.username)
+    def deletetraveller(self, ):
+        self.traveller_handler.delete_traveller(self.username)
 
     def searchtraveller(self, query):
         return self.traveller_handler.search_traveller(query, self.username)
 
-    def addscooter(self, scooterinfo):
-        self.scooter_handler.add_scooter(scooterinfo, self.username)
+    def addscooter(self):
+        self.scooter_handler.add_scooter(self.username)
 
-    def updatescooter(self, serialnumber, newinfo, serviceengineer=False):
-        self.scooter_handler.update_scooter(serialnumber, newinfo, self.username)
+    def updatescooter(self):
+        if self.role == "ServiceEngineer":
+            self.scooter_handler.updatescooterlimit(self.username)
+        else:
+            self.scooter_handler.update_scooter(self.username)
 
-    def deletescooter(self, serialnumber):
-        self.scooter_handler.delete_scooter(serialnumber, self.username)
+    def deletescooter(self):
+        self.scooter_handler.delete_scooter(self.username)
 
     def getscooterinfo(self, query):
         return self.scooter_handler.search_scooter(query, self.username)
@@ -632,15 +683,15 @@ class SuperAdministrator(User):
 
     def handle_menu_choice(self, choice):
         if choice == '3':
-            u = input("New System Admin Username: ")
-            p = input("New System Admin Password: ")
+            u = input("New System Admin Username (8-10 chars, must start with a letter or _, allowed: a-z, 0-9, _, ', .): ")
+            p = input("New System Admin Password (12-30 chars, must include lowercase, uppercase, digit, special char): ")
             f = input("New System Admin First Name: ")
             l = input("New System Admin Last Name: ")
             self.addsystemadmin(u, p, f, l)
 
         elif choice == '4':
             u = input("Username of System Admin to update: ")
-            new_u = input("New Username (leave empty to skip): ")
+            new_u = input("New Username (leave empty to skip, (8-10 chars, must start with a letter or _, allowed: a-z, 0-9, _, ', .)): ")
             new_f = input("New First Name (leave empty to skip): ")
             new_l = input("New Last Name (leave empty to skip): ")
             
@@ -657,7 +708,7 @@ class SuperAdministrator(User):
 
         elif choice == '6':
             u = input("Username of System Admin to reset password: ")
-            new_p = input("New password for System Admin: ")
+            new_p = input("New password for System Admin (12-30 chars, must include lowercase, uppercase, digit, special char): ")
             self.resetpasswordsysadmin(u, new_p)
 
         elif choice == '7':
@@ -668,8 +719,8 @@ class SuperAdministrator(User):
             self.revokerestorecode()
 
         elif choice == '9':
-            u = input("New Service Engineer Username: ")
-            p = input("New Service Engineer Password: ")
+            u = input("New Service Engineer Username (must be between 8-10 char): ")
+            p = input("New Service Engineer Password (12-30 characters, must include lowercase, uppercase, digit, special character): ")
             f = input("New Service Engineer First Name: ")
             l = input("New Service Engineer Last Name: ")
             self.addserviceengineer(u, p, f, l)
@@ -678,7 +729,7 @@ class SuperAdministrator(User):
             u = input("Username of Service Engineer to update: ")
             nf = input("New First Name (leave empty to skip): ")
             nl = input("New Last Name (leave empty to skip): ")
-            nu = input("New Username (leave empty to skip): ")
+            nu = input("New Username (leave empty to skip, 8-10 chars, must start with a letter or _, allowed: a-z, _, ', .): ")
             data = {}
             if nf: data['first_name'] = nf
             if nl: data['last_name'] = nl
@@ -691,27 +742,24 @@ class SuperAdministrator(User):
 
         elif choice == '12':
             u = input("Username of Service Engineer to reset password: ")
-            np = input("New password for Service Engineer: ")
+            np = input("New password for Service Engineer (12-30 chars, must include lowercase, uppercase, digit, special char): ")
             self.resetengineerpassword(u, np)
 
         elif choice == '13':
             self.viewlogs()
 
         elif choice == '14':
-            code = self.createrestorecode('superadmin')
-            self.makebackup(code)
+            self.makebackup()
 
         elif choice == '15':
-            rc = input("Enter restore code: ")
-            bid = input("Enter backup ID: ")
-            self.restoresystembackup(rc, bid)
+            self.restoresystembackup()
 
         elif choice == '16':
             tinfo = {
                 'first_name': input("Traveller First Name: "),
                 'last_name':  input("Traveller Last Name: "),
                 'birthday':   input("Traveller Birthday (YYYY-MM-DD): "),
-                'gender':     input("Traveller Gender: "),
+                'gender':     input("Traveller Gender (Male/Female): "),
                 'street_name':input("Traveller Street Name: "),
                 'house_number':input("Traveller House Number: "),
                 'zip_code':   input("Traveller Zip Code (DDDDXX): "),
@@ -723,59 +771,19 @@ class SuperAdministrator(User):
             self.addtraveller(tinfo)
 
         elif choice == '17':
-            cid = input("Traveller ID to update: ")
-            data = {}
-            print("Enter new values (leave empty to skip):")
-            em = input("New Email: ")
-            if em: data['email'] = em
-            ph = input("New Mobile Phone (8 digits): ")
-            if ph:
-                data['mobile_phone'] = "+31-6-" + ph if self.input_validation.is_valid_phone(ph) else ph
-            zp = input("New Zip Code: ")
-            if zp: data['zip_code'] = zp
-            ct = input(f"New City (choose from {', '.join(self.dutch_cities)}): ")
-            if ct: data['city'] = ct
-            self.updatetraveller(cid, data)
+            self.updatetraveller()
 
         elif choice == '18':
-            cid = input("Traveller ID to delete: ")
-            self.deletetraveller(cid)
+            self.deletetraveller()
 
         elif choice == '19':
-            sinfo = {
-                'serial_number': input("Scooter Serial Number (10-17 alphanumeric): "),
-                'brand': input("Scooter Brand: "),
-                'model': input("Scooter Model: "),
-                'top_speed': float(input("Top Speed (km/h): ")),
-                'battery_capacity': float(input("Battery Capacity (Wh): ")),
-                'state_of_charge': float(input("State of Charge (%): ")),
-                'target_range_soc': float(input("Target Range SoC (%): ")),
-                'location': input("Location (lat,long 5 dec): "),
-                'out_of_service_status': int(input("Out of Service (0/1): ")),
-                'mileage': float(input("Mileage (km): ")),
-                'last_maintenance_date': input("Last Maintenance (YYYY-MM-DD): ")
-            }
-            self.addscooter(sinfo)
+            self.addscooter()
 
         elif choice == '20':
-            sn = input("Scooter Serial Number to update: ")
-            data = {}
-            print("Enter new values (leave empty to skip):")
-            soc = input("New SoC (%): ")
-            if soc: data['state_of_charge'] = float(soc)
-            loc = input("New Location (lat,long): ")
-            if loc: data['location'] = loc
-            oos = input("Out of Service (0/1): ")
-            if oos: data['out_of_service_status'] = int(oos)
-            mil = input("New Mileage (km): ")
-            if mil: data['mileage'] = float(mil)
-            lmd = input("New Last Maintenance Date (YYYY-MM-DD): ")
-            if lmd: data['last_maintenance_date'] = lmd
-            self.updatescooter(sn, data, serviceengineer=False)
+            self.updatescooter()
 
         elif choice == '21':
-            sn = input("Scooter Serial Number to delete: ")
-            self.deletescooter(sn)
+            self.deletescooter()
         else:
             print("That's not a valid option. Please try again.")
 

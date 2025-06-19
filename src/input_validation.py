@@ -86,22 +86,28 @@ class InputValidation:
             min_soc < max_soc
         )
 
-    def is_valid_location(self, latitude: float, longitude: float) -> bool:
+    def is_valid_location(self, latitude: str, longitude: str) -> bool:
+        try:
+            lat_val = float(latitude)
+            long_val = float(longitude)
+        except ValueError:
+            return False
+        
         return (
-            51.85 <= latitude <= 52.00 and
-            4.35 <= longitude <= 4.55 and
+            51.85 <= lat_val <= 52.00 and
+            4.35 <= long_val <= 4.55 and
             self.has_five_decimals(latitude) and
             self.has_five_decimals(longitude)
         )
 
-    def has_five_decimals(self, number: float) -> bool:
+    def has_five_decimals(self, number: str) -> bool:
         try:
-            return len(str(number).split('.')[-1]) >= 5
+            return len(number.split('.')[-1]) == 5
         except Exception:
             return False
 
-    def is_valid_out_of_service(self, status: bool) -> bool:
-        return isinstance(status, bool)
+    def is_valid_out_of_service(self, status: str) -> str:
+        return isinstance(status, str) and status in ("0", "1")
 
     def is_valid_mileage(self, mileage: float) -> bool:
         return isinstance(mileage, (int, float)) and mileage >= 0
