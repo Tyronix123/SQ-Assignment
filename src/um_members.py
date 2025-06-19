@@ -28,6 +28,7 @@ except FileNotFoundError:
 else:
     print("Loaded the key from 'encryption.key'.")
 
+
 class UmMembers:
     def __init__(self, db_name="src/data/urban_mobility.db",
                  encryption_key=ENCRYPTION_KEY,
@@ -132,6 +133,7 @@ class UmMembers:
             print(f"\nLogged in as: {self.loggedinuser.getmyusername()} ({role})")
             self.loggedinuser.show_menu()
             choice = input("Choose an option: ")
+            self.clear_console()
             if choice == '1':
                 if role == 'SuperAdministrator':
                     print("SuperAdministrator cannot change their password.")
@@ -145,6 +147,9 @@ class UmMembers:
                 break
             else:
                 self.loggedinuser.handle_menu_choice(choice)
+
+    def clear_console(self):
+        os.system('cls' if os.name == 'nt' else 'clear')
 
 if __name__ == "__main__":
     app = UmMembers()

@@ -31,23 +31,36 @@ class SuperAdministrator(User):
 
     def _manage_user_account(self, username, password, firstname, lastname, role, action_details):
         print(f"\n{action_details}")
+        
         if not self.db_handler:
             print("Error: Database not connected.")
             return False
 
-        user_data = {
-            "username":  username,
-            "password":  password,
-            "firstname": firstname,
-            "lastname":  lastname,
-            "role":      role,
-        }
+        while True:
+            user_data = {
+                "username":  username,
+                "password":  password,
+                "firstname": firstname,
+                "lastname":  lastname,
+                "role":      role,
+            }
 
-        validated_user_data = self.input_handler.handle_user_data(user_data)
-        if validated_user_data is None:
-            print("Failed to validate user data. Please try again.")
-            self.logger.writelog(self.username, f"{role} creation Failed", f"Invalid user data for '{username}'", issuspicious=True)
-            return False
+            try:
+                validated_user_data = self.input_handler.handle_user_data(user_data)
+                break
+            except ValueError as e:
+                print(f"Fout: {e}")
+                print("Voer de gegevens opnieuw in.\n")
+                username = input("Gebruikersnaam: ")
+                password = input("Wachtwoord: ")
+                firstname = input("Voornaam: ")
+                lastname = input("Achternaam: ")
+
+        username = validated_user_data["username"]
+        password = validated_user_data["password"]
+        firstname = validated_user_data["first_name"]
+        lastname = validated_user_data["last_name"]
+        role = validated_user_data["role"]
 
         all_users = self.db_handler.getdata('users')
         if any(u['username'].lower() == username.lower() for u in all_users):
@@ -56,6 +69,7 @@ class SuperAdministrator(User):
             return False
 
         return True
+
 
     def _create_user_record(self, username, password, firstname, lastname, role):
 
