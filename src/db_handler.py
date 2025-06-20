@@ -318,9 +318,9 @@ class DBHandler:
             for row in rows:
                 decrypted_user = {
                     'username': self.decryptdata(row[0]),
-                    'first_name': self.decryptdata(row[3]),
-                    'last_name': self.decryptdata(row[4]),
-                    'role': row[2]
+                    'first_name': self.decryptdata(row[1]),
+                    'last_name': self.decryptdata(row[2]),
+                    'role': row[3]
                 }
                 decrypted_users.append(decrypted_user)
 
