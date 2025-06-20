@@ -174,9 +174,29 @@ class SuperAdministrator(User):
             return False
 
         if username_to_delete == self.username:
-            print(self_deletion_message)
-            self.logger.writelog(self.username, f"Delete {role} Failed", f"Tried to delete self ({username_to_delete})", issuspicious=True)
-            return False
+            print("You are deleting your own account. This will log you out and permanently remove access.")
+            confirm = input("Are you absolutely sure you want to delete your account? Type 'yes' to confirm: ")
+
+            if confirm == 'yes':
+                self.logger.writelog(
+                    self.username,
+                    f"Delete {role} (Self)",
+                    f"Deleted own account ({username_to_delete}).",
+                    issuspicious=False
+                )
+                self.db_handler.deleterecord('users', 'username', username_to_delete)
+                print("Your account has been deleted.")
+                self.logout()
+                return True
+            else:
+                print("Account deletion cancelled.")
+                self.logger.writelog(
+                    self.username,
+                    f"Delete {role} (Self) Cancelled",
+                    f"Attempt to delete own account ({username_to_delete}) was cancelled by user.",
+                    issuspicious=False
+                )
+                return False
 
         all_users_raw = self.db_handler.getrawdata('users')
         target_user = None
@@ -197,7 +217,7 @@ class SuperAdministrator(User):
             return False
 
         confirmation = input(
-            f"Are you certain you want to delete {role} '{username_to_delete}'? This cannot be undone. (type 'yes' to confirm): ").lower()
+            f"Are you certain you want to delete {role} '{username_to_delete}'? This cannot be undone. (type 'yes' to confirm): ")
         if confirmation != 'yes':
             print("Deleting cancelled.")
             self.logger.writelog(self.username, f"Deletion {role} Cancelled", f"Cancelled deletion of '{username_to_delete}'")
@@ -278,28 +298,144 @@ class SuperAdministrator(User):
             )
             return False
 
+    def list_users_by_role(self, role):
+        users = self.db_handler.get_users_by_role(role)
+        
+        if not users:
+            print(f"No {role}s found.")
+            self.logger.writelog(self.username, "List users by role", f"No {role}s found")
+            return []
 
-    def addsystemadmin(self, username, password, firstname, lastname):
-        if self._manage_user_account(username, password, firstname, lastname, "SystemAdministrator", "Creating a New System Administrator"):
-            if self._create_user_record(username, password, firstname, lastname, "SystemAdministrator"):
+        print(f"{role}s:")
+        for idx, user in enumerate(users, start=1):
+            print(f"{idx}. {user['first_name']} {user['last_name']} (Username: {user['username']})")
+        
+        self.logger.writelog(self.username, f"List {role}s", f"Listed {len(users)} {role}s")
+        return users
+    
+    def select_user_from_list(self, user_list, prompt_message="Select a user by number:"):
+        try:
+            selection = int(input(prompt_message))
+            if 1 <= selection <= len(user_list):
+                return user_list[selection - 1]
+            else:
+                print("Invalid selection.")
+                self.logger.writelog(self.username, "User Selection Failed", "Invalid selection number", issuspicious=True)
+                return None
+        except ValueError:
+            print("Please enter a valid number.")
+            self.logger.writelog(self.username, "User Selection Failed", "Non-integer input during selection", issuspicious=True)
+            return None
+
+    def addsystemadmin(self):
+        u = input("New System Admin Username (8-10 chars, must start with a letter or _, allowed: a-z, 0-9, _, ', .): ")
+        p = input("New System Admin Password (12-30 chars, must include lowercase, uppercase, digit, special char): ")
+        f = input("New System Admin First Name: ")
+        l = input("New System Admin Last Name: ")
+        if self._manage_user_account(u, p, f, l, "SystemAdministrator", "Creating a New System Administrator"):
+            if self._create_user_record(u, p, f, l, "SystemAdministrator"):
                 print("System Administrator was successfully added")
-                self.logger.writelog(self.username, "Add System Admin", f"New System Admin '{username}' created.")
+                self.logger.writelog(self.username, "Add System Admin", f"New System Admin '{u}' created.")
 
-    def changesystemadmininfo(self, usernametochange, newinfo):
-        self._update_user_info(usernametochange, newinfo, "SystemAdministrator")
+    def changesystemadmininfo(self):
+        if self.role == "SuperAdministrator":
+            system_admins = self.list_users_by_role("SystemAdministrator")
+            if not system_admins:
+                return
 
-    def deletesystemadmin(self, sysadmin_to_delete):
+            selected_admin = self.select_user_from_list(system_admins, "Select a system administrator by number: ")
+            if not selected_admin:
+                return
+            current_username = selected_admin['username']
+        else:
+            current_username = self.username
+
+        print("\nLeave a field empty to skip updating it.")
+        new_u = input("New Username (8‑10 chars, must start with a letter or _, allowed: a‑z, 0‑9, _, ', .): ")
+        new_f = input("New First Name: ")
+        new_l = input("New Last Name: ")
+
+        data = {}
+        if new_u: data['username']   = new_u
+        if new_f: data['first_name'] = new_f
+        if new_l: data['last_name']  = new_l
+
+        if data:
+            self._update_user_info(current_username, data, "SystemAdministrator")
+            self.logger.writelog(self.username, "Update SystemAdmin", f"Updated {list(data.keys())} for '{current_username}'")
+        else:
+            print("No changes provided. Nothing was updated.")
+            self.logger.writelog(self.username, "Update SystemAdmin Skipped", f"No changes for '{current_username}'")
+
+    def deletesystemadmin(self):
+        if self.role == "SuperAdministrator":
+            system_admins = self.list_users_by_role("SystemAdministrator")
+            if not system_admins:
+                return
+
+            selected_admin = self.select_user_from_list(system_admins, "Select a system administrator to delete by number: ")
+            if not selected_admin:
+                self.logger.writelog(self.username, "Delete SystemAdmin Failed", "Invalid or no selection made", issuspicious=True)
+                return
+
+            sysadmin_to_delete = selected_admin['username']
+        else:
+            sysadmin_to_delete = self.username
+            
         self._delete_user(sysadmin_to_delete, "SystemAdministrator", "Can't delete Super Administrator account")
+        self.logger.writelog(self.username, "Delete SystemAdmin", f"Deleted system administrator: {sysadmin_to_delete}")
+    
+    def resetpasswordsysadmin(self):
+        system_admins = self.list_users_by_role("SystemAdministrator")
+        if not system_admins:
+            return
 
-    def resetpasswordsysadmin(self, usernamereset, newpassword):
+        selected_admin = self.select_user_from_list(system_admins, "Select a system administrator to reset password by number: ")
+        if not selected_admin:
+            return
+
+        usernamereset = selected_admin['username']
+        newpassword = input("New password for System Admin (12-30 chars, must include lowercase, uppercase, digit, special char): ")
+
         self._reset_password(usernamereset, newpassword, "SystemAdministrator")
+        self.logger.writelog(self.username, "Reset Password", f"Reset password for system administrator: {usernamereset}")
 
-    def createrestorecode(self, target_username: str):
+    def createrestorecode(self):
+        print("Do you want to create a restore code for:")
+        print("1. Yourself")
+        print("2. A System Administrator")
+
+        choice = input("Enter 1 or 2: ").strip()
+
+        if choice == "1":
+            target_username = self.username
+        elif choice == "2":
+            system_admins = self.list_users_by_role("SystemAdministrator")
+            if not system_admins:
+                print("No system administrators found.")
+                self.logger.writelog(self.username, "Generate Restore Code Failed", "No system administrators found", issuspicious=True)
+                return
+
+            print("Select a System Administrator:")
+            for idx, admin in enumerate(system_admins, start=1):
+                print(f"{idx}. {admin['first_name']} {admin['last_name']} (Username: {admin['username']})")
+
+            selected_admin = self.select_user_from_list(system_admins, "Select a system administrator to create a restore code for: ")
+            if not selected_admin:
+                return         
+            target_username = selected_admin['username']
+
+        else:
+            print("Invalid choice.")
+            self.logger.writelog(self.username, "Generate Restore Code Failed", "Invalid choice input", issuspicious=True)
+            return
+
         print(f"\nGenerating Restore Code for Administrator: {target_username}")
 
         if not self.db_handler:
             print("Error: Database not connected.")
-            return "ERROR"
+            self.logger.writelog(self.username, "Generate Restore Code Failed", "Database not connected", issuspicious=True)
+            return
 
         all_users_raw = self.db_handler.getrawdata('users')
         creator_raw   = None
@@ -318,18 +454,19 @@ class SuperAdministrator(User):
 
         if not creator_raw:
             print("Creator record not found – DB inconsistent.")
-            return "ERROR"
+            self.logger.writelog(self.username, "Generate Restore Code Failed", "Creator record not found", issuspicious=True)
+            return
 
         allowed_roles = {"SystemAdministrator", "SuperAdministrator"}
         if not target_raw or target_raw["role"] not in allowed_roles:
             print(f"Error: '{target_username}' is not an eligible administrator.")
             self.logger.writelog(
-                self.getmyusername(),
+                self.username,
                 "Generate Restore Code Failed",
-                f"'{target_username}' ineligible for restore‑code",
+                f"'{target_username}' ineligible for restore-code",
                 issuspicious=True,
             )
-            return "ERROR"
+            return
 
         restore_code = secrets.token_urlsafe(16)
         backup_id    = secrets.token_hex(8)
@@ -356,7 +493,7 @@ class SuperAdministrator(User):
                 "  (one‑time use only)"
             )
             self.logger.writelog(
-                self.getmyusername(),
+                self.username,
                 "Generate Restore Code",
                 f"Code for '{target_username}', backup ID {backup_id}",
             )
@@ -365,10 +502,9 @@ class SuperAdministrator(User):
         except Exception as e:
             print(f"Could not generate restore code: {e}")
             self.logger.writelog(
-                self.getmyusername(), "Generate Restore Code Failed", str(e), issuspicious=True
+                self.username, "Generate Restore Code Failed", str(e), issuspicious=True
             )
-            return "ERROR"
-
+            return
 
     def revokerestorecode(self, code_to_revoke: str | None = None) -> bool:
         if not self.db_handler:
@@ -611,8 +747,8 @@ class SuperAdministrator(User):
                                 str(e))
 
 
-    def addtraveller(self, travellerinfo):
-        self.traveller_handler.add_traveller(travellerinfo, self.username)
+    def addtraveller(self):
+        self.traveller_handler.add_traveller(self.username)
 
     def updatetraveller(self):
         self.traveller_handler.update_traveller(self.username)
@@ -620,8 +756,8 @@ class SuperAdministrator(User):
     def deletetraveller(self, ):
         self.traveller_handler.delete_traveller(self.username)
 
-    def searchtraveller(self, query):
-        return self.traveller_handler.search_traveller(query, self.username)
+    def searchtraveller(self):
+        return self.traveller_handler.search_traveller(self.username)
 
     def addscooter(self):
         self.scooter_handler.add_scooter(self.username)
@@ -635,39 +771,81 @@ class SuperAdministrator(User):
     def deletescooter(self):
         self.scooter_handler.delete_scooter(self.username)
 
-    def getscooterinfo(self, query):
-        return self.scooter_handler.search_scooter(query, self.username)
+    def searchscooter(self):
+        return self.scooter_handler.search_scooter(self.username)
 
-    def mark_scooter_out_of_service(self, serial_number, reason=""):
-        self.scooter_handler.mark_scooter_out_of_service(serial_number, self.username, reason)
-
-    def mark_scooter_in_service(self, serial_number):
-        self.scooter_handler.mark_scooter_in_service(serial_number, self.username)
-
-    def addserviceengineer(self, username, password, firstname, lastname):
-        if self._manage_user_account(username, password, firstname, lastname, "ServiceEngineer", "Creating a New Service Engineer"):
-            if self._create_user_record(username, password, firstname, lastname, "ServiceEngineer"):
+    def addserviceengineer(self):
+        u = input("New Service Engineer Username (must be between 8-10 char): ")
+        p = input("New Service Engineer Password (12-30 characters, must include lowercase, uppercase, digit, special character): ")
+        f = input("New Service Engineer First Name: ")
+        l = input("New Service Engineer Last Name: ")
+        if self._manage_user_account(u, p, f, l, "ServiceEngineer", "Creating a New Service Engineer"):
+            if self._create_user_record(u, p, f, l, "ServiceEngineer"):
                 print("Service Engineer was successfully added")
-                self.logger.writelog(self.username, "Added Service Engineer", f"New Service Engineer '{username}' created.")
+                self.logger.writelog(self.username, "Added Service Engineer", f"New Service Engineer '{u}' created.")
 
-    def updateserviceengineerinfo(self, usernametochange, new_info):
-        self._update_user_info(usernametochange, new_info, "ServiceEngineer")
+    def updateserviceengineerinfo(self):
+        service_engineers = self.list_users_by_role("ServiceEngineer")
+        if not service_engineers:
+            return
 
-    def deleteserviceengineer(self, usernametodelete):
-        self._delete_user(usernametodelete, "ServiceEngineer", "ERROR: System admin cant be deleted using this function.")
+        selected_engineer = self.select_user_from_list(service_engineers, "Select a service engineer to update their info: ")
+        if not selected_engineer:
+            return         
+        username_to_change = selected_engineer['username']
 
-    def resetengineerpassword(self, usernamereset, newpassword):
-        self._reset_password(usernamereset, newpassword, "ServiceEngineer")
+        print("\nLeave a field empty to skip updating it.")
+        new_u = input("New Username (8-10 chars, must start with a letter or _, allowed: a-z, 0-9, _, ', .): ")
+        new_f = input("New First Name (leave empty to skip): ")
+        new_l = input("New Last Name (leave empty to skip): ")
+
+        data = {}
+        if new_u: data['username'] = new_u
+        if new_f: data['first_name'] = new_f
+        if new_l: data['last_name'] = new_l
+
+        if data:
+            self._update_user_info(username_to_change, data, "ServiceEngineer")
+            self.logger.writelog(self.username, "Update Service Engineer Info", f"Updated fields {list(data.keys())} for '{username_to_change}'")
+        else:
+            print("No changes provided. Nothing was updated.")
+            self.logger.writelog(self.username, "Update Service Engineer Info Skipped", f"No changes provided for '{username_to_change}'")
+
+    def deleteserviceengineer(self):
+        service_engineers = self.list_users_by_role("ServiceEngineer")
+        if not service_engineers:
+            return
+
+        selected_engineer = self.select_user_from_list(service_engineers, "Select a service engineer to delete: ")
+        if not selected_engineer:
+            return         
+        username_to_delete = selected_engineer['username']
+
+        self._delete_user(username_to_delete, "ServiceEngineer", "ERROR: System admin can't be deleted using this function.")
+        self.logger.writelog(self.username, "Delete Service Engineer", f"Deleted service engineer '{username_to_delete}'")
+
+    def resetengineerpassword(self):
+        service_engineers = self.list_users_by_role("ServiceEngineer")
+        if not service_engineers:
+            return
+
+        selected_engineer = self.select_user_from_list(service_engineers, "Select a service engineer to reset their password: ")
+        if not selected_engineer:
+            return         
+        username_to_reset = selected_engineer['username']
+
+        newpassword = input("New password for Service Engineer (12-30 chars, must include lowercase, uppercase, digit, special char): ")
+        
+        self._reset_password(username_to_reset, newpassword, "ServiceEngineer")
+        self.logger.writelog(self.username, "Reset Service Engineer Password", f"Reset password for service engineer '{username_to_reset}'")
 
     def viewlogs(self):
         if self.logger:
             self.logger.show_logs_to_admin()
         else:
             print("Logger not available to view logs.")
-            self.logger.writelog(self.username, "View Logs Failed", "Logger unavailable.")
 
     def viewallusers(self):
-        print("\nAll System Users and Their Roles")
         if not self.db_handler:
             print("Error: Database not connected. Can't view users.")
             return
@@ -677,146 +855,61 @@ class SuperAdministrator(User):
             print("No users found in the system.")
             return
 
+        print("\n--- List of Users and Roles ---")
         for user in users:
-            print(f"Username: {user.get('username')}, Role: {user.get('role')}")
+            username = user.get('username', 'Unknown')
+            role = user.get('role', 'No Role Assigned')
+            print(f"Username: {username} | Role: {role}")
         self.logger.writelog(self.username, "View Users", "Viewed all system users and roles.")
 
     def handle_menu_choice(self, choice):
-        if choice == '3':
-            u = input("New System Admin Username (8-10 chars, must start with a letter or _, allowed: a-z, 0-9, _, ', .): ")
-            p = input("New System Admin Password (12-30 chars, must include lowercase, uppercase, digit, special char): ")
-            f = input("New System Admin First Name: ")
-            l = input("New System Admin Last Name: ")
-            self.addsystemadmin(u, p, f, l)
-
-        elif choice == '4':
-            u = input("Username of System Admin to update: ")
-            new_u = input("New Username (leave empty to skip, (8-10 chars, must start with a letter or _, allowed: a-z, 0-9, _, ', .)): ")
-            new_f = input("New First Name (leave empty to skip): ")
-            new_l = input("New Last Name (leave empty to skip): ")
-            
-            data = {}
-            if new_u: data['username'] = new_u
-            if new_f: data['first_name'] = new_f
-            if new_l: data['last_name'] = new_l
-
-            self.changesystemadmininfo(u, data)
-
-        elif choice == '5':
-            u = input("Username of System Admin to delete: ")
-            self.deletesystemadmin(u)
-
-        elif choice == '6':
-            u = input("Username of System Admin to reset password: ")
-            new_p = input("New password for System Admin (12-30 chars, must include lowercase, uppercase, digit, special char): ")
-            self.resetpasswordsysadmin(u, new_p)
-
-        elif choice == '7':
-            sa = input("Enter System Admin username for restore code: ")
-            self.createrestorecode(sa)
-
-        elif choice == '8':
-            self.revokerestorecode()
-
-        elif choice == '9':
-            u = input("New Service Engineer Username (must be between 8-10 char): ")
-            p = input("New Service Engineer Password (12-30 characters, must include lowercase, uppercase, digit, special character): ")
-            f = input("New Service Engineer First Name: ")
-            l = input("New Service Engineer Last Name: ")
-            self.addserviceengineer(u, p, f, l)
-
-        elif choice == '10':
-            u = input("Username of Service Engineer to update: ")
-            nf = input("New First Name (leave empty to skip): ")
-            nl = input("New Last Name (leave empty to skip): ")
-            nu = input("New Username (leave empty to skip, 8-10 chars, must start with a letter or _, allowed: a-z, _, ', .): ")
-            data = {}
-            if nf: data['first_name'] = nf
-            if nl: data['last_name'] = nl
-            if nu: data['username'] = nu
-            self.updateserviceengineerinfo(u, data)
-
-        elif choice == '11':
-            u = input("Username of Service Engineer to delete: ")
-            self.deleteserviceengineer(u)
-
-        elif choice == '12':
-            u = input("Username of Service Engineer to reset password: ")
-            np = input("New password for Service Engineer (12-30 chars, must include lowercase, uppercase, digit, special char): ")
-            self.resetengineerpassword(u, np)
-
-        elif choice == '13':
-            self.viewlogs()
-
-        elif choice == '14':
-            self.makebackup()
-
-        elif choice == '15':
-            self.restoresystembackup()
-
-        elif choice == '16':
-            tinfo = {
-                'first_name': input("Traveller First Name: "),
-                'last_name':  input("Traveller Last Name: "),
-                'birthday':   input("Traveller Birthday (YYYY-MM-DD): "),
-                'gender':     input("Traveller Gender (Male/Female): "),
-                'street_name':input("Traveller Street Name: "),
-                'house_number':input("Traveller House Number: "),
-                'zip_code':   input("Traveller Zip Code (DDDDXX): "),
-                'city':       input(f"Traveller City (choose from {', '.join(self.dutch_cities)}): "),
-                'email':      input("Traveller Email Address: "),
-                'mobile_phone': input("Traveller Mobile Phone (8 digits): "),
-                'driving_license': input("Driving License Number (XXDDDDDDD or XDDDDDDDD): ")
-            }
-            self.addtraveller(tinfo)
-
-        elif choice == '17':
-            self.updatetraveller()
-
-        elif choice == '18':
-            self.deletetraveller()
-
-        elif choice == '19':
-            self.addscooter()
-
-        elif choice == '20':
-            self.updatescooter()
-
-        elif choice == '21':
-            self.deletescooter()
-        else:
-            print("That's not a valid option. Please try again.")
+        if   choice == '3':  self.addsystemadmin()
+        elif choice == '4':  self.changesystemadmininfo()
+        elif choice == '5':  self.deletesystemadmin()
+        elif choice == '6':  self.resetpasswordsysadmin()
+        elif choice == '7':  self.createrestorecode()
+        elif choice == '8':  self.revokerestorecode()
+        elif choice == '9':  self.addserviceengineer()
+        elif choice == '10': self.updateserviceengineerinfo()
+        elif choice == '11': self.deleteserviceengineer()
+        elif choice == '12': self.resetengineerpassword()
+        elif choice == '13': self.viewallusers()
+        elif choice == '14': self.viewlogs()
+        elif choice == '15': self.makebackup()
+        elif choice == '16': self.restoresystembackup()
+        elif choice == '17': self.addtraveller()
+        elif choice == '18': self.updatetraveller()
+        elif choice == '19': self.deletetraveller()
+        elif choice == '20': self.searchtraveller()
+        elif choice == '21': self.addscooter()
+        elif choice == '22': self.updatescooter()
+        elif choice == '23': self.deletescooter()
+        elif choice == '24': self.searchscooter()
+        else: print("That's not a valid option. Please try again.")
 
 
     def show_menu(self):
         print("1. Change My Password")
         print("2. Log Out")
-
-        print("\n--- System Administrator Management ---")
         print("3. Add New System Administrator")
         print("4. Update System Administrator Info")
         print("5. Delete System Administrator")
         print("6. Reset System Administrator Password")
-
-        print("\n--- Restore Code Management ---")
         print("7. Generate Restore Code for System Admin Backup")
         print("8. Revoke Restore Code")
-
-        print("\n--- Service Engineer Management ---")
         print("9. Add New Service Engineer")
         print("10. Update Service Engineer Info")
         print("11. Delete Service Engineer")
         print("12. Reset Service Engineer Password")
-
-        print("\n--- Logs & Backup ---")
-        print("13. View All System Logs")
-        print("14. Make Backup")
-        print("15. Restore Backup from Backup")
-
-        print("\n--- Shared Traveller & Scooter Management ---")
-        print("16. Add New Traveller")
-        print("17. Update Traveller Info")
-        print("18. Delete Traveller")
-        print("19. Add New Scooter")
-        print("20. Update Scooter Info")
-        print("21. Delete Scooter")
+        print("13. View All Users")
+        print("14. View All System Logs")
+        print("15. Make Backup")
+        print("16. Restore Backup from Backup")
+        print("17. Add New Traveller")
+        print("18. Update Traveller Info")
+        print("19. Delete Traveller")
+        print("20. Search Traveller")
+        print("21. Add New Scooter")
+        print("22. Update Scooter Info")
+        print("23. Delete Scooter")
+        print("24. Search Scooter")

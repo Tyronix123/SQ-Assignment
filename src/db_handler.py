@@ -298,3 +298,36 @@ class DBHandler:
                 
         query = f"DELETE FROM {table_name} WHERE {id_column} = ?"
         self.runquery(query, (id_value,))
+
+    def get_users_by_role(self, role):
+        if not self.conn:
+            print("Can't get data, no database connection")
+            return []
+
+        try:
+            cursor = self.conn.cursor()
+            query = "SELECT username, first_name, last_name, role FROM users WHERE role = ?"
+            cursor.execute(query, (role,))
+            rows = cursor.fetchall()
+
+            if not rows:
+                print(f"No users found with role: {role}")
+                return []
+
+            decrypted_users = []
+            for row in rows:
+                decrypted_user = {
+                    'username': self.decryptdata(row[0]),
+                    'first_name': self.decryptdata(row[3]),
+                    'last_name': self.decryptdata(row[4]),
+                    'role': row[2]
+                }
+                decrypted_users.append(decrypted_user)
+
+            return decrypted_users
+
+        except Exception as e:
+            print(f"Error retrieving users by role: {e}")
+            return []
+
+
