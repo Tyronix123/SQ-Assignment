@@ -130,11 +130,7 @@ class TravellerHandler:
         self.db_handler.updateexistingrecord('travellers', 'customer_id', cid, updates)
         print("Traveller information updated successfully.")
 
-        self.logger.writelog(
-            username,
-            "Update Traveller",
-            f"Updated traveller ID '{cid}' with new data: {updates}"
-        )
+        self.logger.writelog(username, "Update Traveller", f"Updated traveller ID '{cid}' with new data: {updates}")
 
 
     def delete_traveller(self, username):

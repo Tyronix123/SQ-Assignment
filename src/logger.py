@@ -24,7 +24,7 @@ class Logger:
                 }
             )
             if issuspicious:
-                print(f"WARNING: suspicious activity detected. sending missile to {username}")
+                print(f"WARNING: suspicious activity detected from {username}.")
                 self.unseensuspiciouslogs.append(
                     f"Suspicious activity detected on user account {username} at {currenttime}: {activity}")
         except Exception as e:

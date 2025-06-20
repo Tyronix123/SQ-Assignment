@@ -136,8 +136,7 @@ class ScooterHandler:
         try:
             self.db_handler.addnewrecord('scooters', scooter_data)
             print(f"Scooter '{scooter_data['brand']} {scooter_data['model']}' (Serial: {serial_number}) added successfully!")
-            self.logger.writelog(username, "Add Scooter",
-                                f"New scooter added: {serial_number}")
+            self.logger.writelog(username, "Add Scooter", f"New scooter added: {serial_number}")
         except Exception as e:
             print(f"Couldn't add scooter. Error: {e}")
             self.logger.writelog(username, "Add Scooter Failed", f"Error: {e}", issuspicious=True)
@@ -167,7 +166,14 @@ class ScooterHandler:
 
         print(f"\n--- Updating Scooter (Service Engineer Mode): {serialnumber} ---")
         state_of_charge = input("State of Charge (%): ")
-        target_range_input = input("Target Range SoC (min,max (%)): ")
+        while True:
+            target_range_input = input("Target Range SoC (min,max %) (e.g. 50,80): ")
+            parts = [p.strip() for p in target_range_input.split(',')]
+            if len(parts) == 2 and all(p.replace('.', '', 1).isdigit() for p in parts):
+                target_min_soc, target_max_soc = parts
+                break
+            else:
+                print("Please enter two numbers separated by a comma, e.g. 50,80.")        
         while True:
             location_input = input("Location (lat,long) (5 decimals): ")
             if location_input == "":
@@ -187,8 +193,6 @@ class ScooterHandler:
         out_of_service_status = input("Out of Service (0/1): ")
         mileage = input("Mileage (km): ")
         last_maintenance_date = input("Last Maintenance (YYYY-MM-DD): ")
-
-        target_min_soc, target_max_soc = target_range_input.split(',')
 
         newinfo = {
             'serial_number': serialnumber,
@@ -299,7 +303,14 @@ class ScooterHandler:
         top_speed = input("Top Speed (km/h): ")
         battery_capacity = input("Battery Capacity (Wh): ")
         state_of_charge = input("State of Charge (%): ")
-        target_range_input = input("Target Range SoC (min,max %) (e.g. 50,80): ")
+        while True:
+            target_range_input = input("Target Range SoC (min,max %) (e.g. 50,80): ")
+            parts = [p.strip() for p in target_range_input.split(',')]
+            if len(parts) == 2 and all(p.replace('.', '', 1).isdigit() for p in parts):
+                target_min_soc, target_max_soc = parts
+                break
+            else:
+                print("Please enter two numbers separated by a comma, e.g. 50,80.")        
         old_lat, old_lon = [s.strip() for s in selected_scooter['location'].split(',')]
         while True:
             location_input = input("Location (lat,long) (5 decimals): ")
@@ -320,7 +331,6 @@ class ScooterHandler:
         out_of_service_status = input("Out of Service (0/1): ")
         mileage = input("Mileage (km): ")
         last_maintenance_date = input("Last Maintenance (YYYY-MM-DD): ")
-        target_min_soc, target_max_soc = target_range_input.split(',')
 
         newinfo = {
             'serial_number': serial_number,

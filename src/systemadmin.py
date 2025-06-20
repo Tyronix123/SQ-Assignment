@@ -67,4 +67,3 @@ class SystemAdministrator(SuperAdministrator):
         print("18. Restore System Backup (Needs Super Admin Code)")
         print("19. View All System Logs")
         print("20. View All System Users and Roles")
-        #print("19. Check for Suspicious Activities (Logs)")

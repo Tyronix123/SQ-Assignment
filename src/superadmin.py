@@ -51,8 +51,8 @@ class SuperAdministrator(User):
                 validated_user_data = self.input_handler.handle_user_data(user_data)
                 break
             except ValueError as e:
-                print(f"Fout: {e}")
-                print("Voer de gegevens opnieuw in.\n")
+                print(f"Error: {e}")
+                print("Enter the details again\n")
                 username = input("Username (8-10 chars, must start with a letter or _, allowed: a-z, 0-9, _, ', .): ")
                 password = input("Password (12-30 chars, must include lowercase, uppercase, digit, special char: ")
                 firstname = input("First name: ")
@@ -137,16 +137,14 @@ class SuperAdministrator(User):
                 all_users = self.db_handler.getdata('users')
                 if any(u['username'].lower() == new_username.lower() for u in all_users):
                     print(f"Error: Username '{new_username}' already exists.")
-                    self.logger.writelog(self.getmyusername(), f"Update {role} Failed",
-                                        f"Duplicate username '{new_username}'", issuspicious=True)
+                    self.logger.writelog(self.getmyusername(), f"Update {role} Failed", f"Duplicate username '{new_username}'", issuspicious=True)
                     return False
 
                 cleaned['username'] = new_username
 
         except ValueError as ve:
             print(f"Validation error: {ve}. Update cancelled.")
-            self.logger.writelog(self.getmyusername(), f"Update {role} Failed",
-                                f"Validation error for '{usernametochange}': {ve}", issuspicious=True)
+            self.logger.writelog(self.getmyusername(), f"Update {role} Failed", f"Validation error for '{usernametochange}': {ve}", issuspicious=True)
             return False
 
         if not cleaned:
@@ -158,13 +156,11 @@ class SuperAdministrator(User):
 
             self.db_handler.updateexistingrecord('users', 'username', encrypted_old_username, cleaned)
             print(f"{role} '{usernametochange}' updated successfully!")
-            self.logger.writelog(self.getmyusername(), f"Update {role}",
-                                f"Details updated for '{usernametochange}'")
+            self.logger.writelog(self.getmyusername(), f"Update {role}", f"Details updated for '{usernametochange}'")
             return True
         except Exception as e:
             print(f"Couldn't update {role} '{usernametochange}'. Error: {e}")
-            self.logger.writelog(self.getmyusername(), f"Update {role} Failed",
-                                f"Error updating '{usernametochange}': {e}", issuspicious=True)
+            self.logger.writelog(self.getmyusername(), f"Update {role} Failed", f"Error updating '{usernametochange}': {e}", issuspicious=True)
             return False
 
     def _delete_user(self, username_to_delete, role, self_deletion_message):
@@ -178,24 +174,14 @@ class SuperAdministrator(User):
             confirm = input("Are you absolutely sure you want to delete your account? Type 'yes' to confirm: ")
 
             if confirm == 'yes':
-                self.logger.writelog(
-                    self.username,
-                    f"Delete {role} (Self)",
-                    f"Deleted own account ({username_to_delete}).",
-                    issuspicious=False
-                )
+                self.logger.writelog(self.username, f"Delete {role} (Self)", f"Deleted own account ({username_to_delete}).", issuspicious=False)
                 self.db_handler.deleterecord('users', 'username', username_to_delete)
                 print("Your account has been deleted.")
                 self.logout()
                 return True
             else:
                 print("Account deletion cancelled.")
-                self.logger.writelog(
-                    self.username,
-                    f"Delete {role} (Self) Cancelled",
-                    f"Attempt to delete own account ({username_to_delete}) was cancelled by user.",
-                    issuspicious=False
-                )
+                self.logger.writelog(self.username, f"Delete {role} (Self) Cancelled", f"Attempt to delete own account ({username_to_delete}) was cancelled by user.", issuspicious=False)
                 return False
 
         all_users_raw = self.db_handler.getrawdata('users')
@@ -212,8 +198,7 @@ class SuperAdministrator(User):
 
         if not target_user:
             print(f"Error: {role} '{username_to_delete}' not found or isn't a {role}.")
-            self.logger.writelog(self.username, f"Delete {role} Failed",
-                                f"Target '{username_to_delete}' not found or wrong role", issuspicious=True)
+            self.logger.writelog(self.username, f"Delete {role} Failed", f"Target '{username_to_delete}' not found or wrong role", issuspicious=True)
             return False
 
         confirmation = input(
@@ -231,8 +216,7 @@ class SuperAdministrator(User):
             return True
         except Exception as e:
             print(f"Problem occurred. Couldn't delete: '{username_to_delete}'. Error: {e}")
-            self.logger.writelog(self.username, f"Delete {role} Failed", f"Error deleting '{username_to_delete}': {e}",
-                                issuspicious=True)
+            self.logger.writelog(self.username, f"Delete {role} Failed", f"Error deleting '{username_to_delete}': {e}", issuspicious=True)
             return False
 
 
@@ -244,11 +228,9 @@ class SuperAdministrator(User):
             print("Error: Database is not available.")
             return False
 
-        # Get all raw users (encrypted usernames)
         raw_users = self.db_handler.getrawdata('users')
         target_user_raw = None
 
-        # Find user by decrypting usernames and matching role
         for raw_user in raw_users:
             decrypted_username = self.db_handler.decryptdata(raw_user['username'])
             if decrypted_username.lower() == username_reset.lower() and raw_user['role'] == role:
@@ -257,49 +239,29 @@ class SuperAdministrator(User):
 
         if not target_user_raw:
             print(f"Error: {role} '{username_reset}' not found.")
-            self.logger.writelog(
-                self.username,
-                f"Reset {role} Password Failed",
-                f"Target '{username_reset}' not found or wrong role",
-                issuspicious=True
-            )
+            self.logger.writelog(self.username, f"Reset {role} Password Failed", f"Target '{username_reset}' not found or wrong role", issuspicious=True)
             return False
 
         if not self.input_validation.is_valid_password(newpassword):
             print("The new password isn't strong enough.")
-            self.logger.writelog(
-                self.username,
-                f"Reset {role} Password Failed",
-                f"Bad new password for '{username_reset}'",
-                issuspicious=True
-            )
+            self.logger.writelog(self.username, f"Reset {role} Password Failed", f"Bad new password for '{username_reset}'", issuspicious=True)
             return False
 
         hashed_password = self.makepasswordhash(newpassword)
 
         try:
-            # Use the original encrypted username for the update
             self.db_handler.updateexistingrecord(
                 'users',
                 'username',
-                target_user_raw['username'],  # encrypted username
+                target_user_raw['username'],
                 {'password_hash': hashed_password}
             )
             print(f"Password for {role} '{username_reset}' has been successfully reset!")
-            self.logger.writelog(
-                self.username,
-                f"Reset {role} Password",
-                f"Password for '{username_reset}' reset."
-            )
+            self.logger.writelog(self.username, f"Reset {role} Password", f"Password for '{username_reset}' reset.")
             return True
         except Exception as e:
             print(f"A problem happened while resetting password for '{username_reset}'. Error: {e}")
-            self.logger.writelog(
-                self.username,
-                f"Reset {role} Password Failed",
-                f"Error resetting password for '{username_reset}': {e}",
-                issuspicious=True
-            )
+            self.logger.writelog(self.username, f"Reset {role} Password Failed", f"Error resetting password for '{username_reset}': {e}", issuspicious=True)
             return False
 
 
@@ -462,12 +424,7 @@ class SuperAdministrator(User):
         allowed_roles = {"SystemAdministrator", "SuperAdministrator"}
         if not target_raw or target_raw["role"] not in allowed_roles:
             print(f"Error: '{target_username}' is not an eligible administrator.")
-            self.logger.writelog(
-                self.username,
-                "Generate Restore Code Failed",
-                f"'{target_username}' ineligible for restore-code",
-                issuspicious=True,
-            )
+            self.logger.writelog(self.username, "Generate Restore Code Failed", f"'{target_username}' ineligible for restore-code", issuspicious=True)
             return
 
         restore_code = secrets.token_urlsafe(16)
@@ -494,18 +451,12 @@ class SuperAdministrator(User):
                 f"  Expires    : {expiry_date}\n"
                 "  (one‑time use only)"
             )
-            self.logger.writelog(
-                self.username,
-                "Generate Restore Code",
-                f"Code for '{target_username}', backup ID {backup_id}",
-            )
+            self.logger.writelog(self.username, "Generate Restore Code", f"Code for '{target_username}', backup ID {backup_id}")
             return restore_code
 
         except Exception as e:
             print(f"Could not generate restore code: {e}")
-            self.logger.writelog(
-                self.username, "Generate Restore Code Failed", str(e), issuspicious=True
-            )
+            self.logger.writelog(self.username, "Generate Restore Code Failed", str(e), issuspicious=True)
             return
 
     def revokerestorecode(self, code_to_revoke: str | None = None) -> bool:
@@ -549,9 +500,7 @@ class SuperAdministrator(User):
 
         if not records:
             print("No such restore code in the system.")
-            self.logger.writelog(
-                self.username, "Revoke Code Failed", f"Code '{code_to_revoke}' not found", issuspicious=True
-            )
+            self.logger.writelog(self.username, "Revoke Code Failed", f"Code '{code_to_revoke}' not found", issuspicious=True)
             return False
 
         record = records[0]
@@ -564,9 +513,7 @@ class SuperAdministrator(User):
                 "restore_codes", "code", code_to_revoke, {"used": 1}
             )
             print("Restore code successfully revoked.")
-            self.logger.writelog(
-                self.username, "Revoke Code", f"Code '{code_to_revoke}' revoked."
-            )
+            self.logger.writelog(self.username, "Revoke Code", f"Code '{code_to_revoke}' revoked.")
             return True
         except Exception as e:
             print(f"Could not revoke code. Error: {e}")
@@ -655,9 +602,7 @@ class SuperAdministrator(User):
 
         if not self.db_handler:
             print("Error: Database not connected.")
-            self.logger.writelog(self.getmyusername(),
-                                "Restore Backup Failed",
-                                "DB not connected")
+            self.logger.writelog(self.getmyusername(), "Restore Backup Failed", "DB not connected")
             return
 
         all_codes = self.db_handler.getdata("restore_codes", {"used": 0})
@@ -718,9 +663,7 @@ class SuperAdministrator(User):
 
         if not os.path.exists(backup_path):
             print(f"Backup file not found at '{backup_path}'.")
-            self.logger.writelog(self.getmyusername(),
-                                "Restore Backup Failed",
-                                f"Missing file {backup_file}")
+            self.logger.writelog(self.getmyusername(), "Restore Backup Failed", f"Missing file {backup_file}")
             return
 
         pre_copy = os.path.join(
@@ -732,9 +675,7 @@ class SuperAdministrator(User):
             print(f"Saved current DB to '{pre_copy}'.")
         except Exception as e:
             print(f"Could not create pre‑restore copy: {e}")
-            self.logger.writelog(self.getmyusername(),
-                                "Restore Backup Failed",
-                                f"Pre‑copy error {e}")
+            self.logger.writelog(self.getmyusername(), "Restore Backup Failed", f"Pre‑copy error {e}")
             return
 
         try:
@@ -748,17 +689,13 @@ class SuperAdministrator(User):
             })
 
             print("Database restored successfully.")
-            self.logger.writelog(
-                self.getmyusername(),
-                "Restore Backup",
+            self.logger.writelog(self.getmyusername(), "Restore Backup",
                 f"Restored from {backup_file} ({backup_id}), "
                 f"pre‑copy at {pre_copy}",
             )
         except Exception as e:
             print(f"Restore failed: {e}")
-            self.logger.writelog(self.getmyusername(),
-                                "Restore Backup Failed",
-                                str(e))
+            self.logger.writelog(self.getmyusername(), "Restore Backup Failed", str(e))
 
 
     def addtraveller(self):
