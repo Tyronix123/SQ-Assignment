@@ -16,6 +16,7 @@ from systemadmin import SystemAdministrator
 from serviceengineer import ServiceEngineer
 from traveller_handler import TravellerHandler
 from scooter_handler import ScooterHandler
+import time
 
 try:
     with open("encryption.key", "rb") as key_file:
@@ -85,8 +86,20 @@ class UmMembers:
 
     def run(self):
         self.setupapp()
+        MAX_ATTEMPTS = 5
+        LOCKOUT_SECONDS = 30
+        attempts = 0
+        last_attempt_time = None
 
         while True:
+            now = time.time()
+            if attempts >= MAX_ATTEMPTS:
+                if last_attempt_time and (now - last_attempt_time) < LOCKOUT_SECONDS:
+                    remaining = int(LOCKOUT_SECONDS - (now - last_attempt_time))
+                    print(f"Too many failed attempts. Please wait {remaining} seconds before trying again.")    
+                    time.sleep(remaining)
+                attempts = 0
+                last_attempt_time = None
             print("\nUrban Mobility Backend System Login")
             usernameinput = input("Enter username (or 'quit' to exit): ")
             if usernameinput.lower() == 'quit':
@@ -94,7 +107,6 @@ class UmMembers:
                 break
 
             password_input = input("Enter password: ")
-
             all_users = self.db_handler.getdata('users')
             userlog = []
 
@@ -106,6 +118,8 @@ class UmMembers:
             if not userlog:
                 print("No user found. Try again")
                 self.logger.writelog("LOGIN_ATTEMPT", f"Failed login for unknown user: '{usernameinput}'", issuspicious=True)
+                attempts += 1
+                last_attempt_time = time.time()
                 continue
 
             loggedinuser = userlog[0]
@@ -122,9 +136,13 @@ class UmMembers:
             if current_user.login(password_input):
                 self.loggedinuser = current_user
                 self.logger.writelog(self.loggedinuser.getmyusername(), "User logged in successfully.", issuspicious=False)
+                attempts = 0
+                last_attempt_time = None
                 self.runsession()
             else:
                 self.logger.writelog(usernameinput, "Failed login attempt (wrong password).", issuspicious=True)
+                attempts += 1
+                last_attempt_time = time.time()
             self.loggedinuser = None
 
     def runsession(self):
