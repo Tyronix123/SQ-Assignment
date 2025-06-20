@@ -32,18 +32,9 @@ class ServiceEngineer(SuperAdministrator):
         self.scooter_handler = scooter_handler
 
     def handle_menu_choice(self, choice):
-<<<<<<< HEAD
         if choice == '3': self.updatescooter()
         elif choice == '4': self.searchscooter()
         else: print("That's not a valid option. Please try again.")
-=======
-        if choice == '3':
-            self.updatescooter()
-        elif choice == '4':
-            self.searchscooter()
-        else:
-            print("That's not a valid option. Please try again.")
->>>>>>> 8f4348ff2208f4ca75f29c87418e154ec9c02e45
 
     def show_menu(self):
         print("1. Change My Password")

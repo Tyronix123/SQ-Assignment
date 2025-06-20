@@ -175,11 +175,7 @@ class SuperAdministrator(User):
 
         if username_to_delete == self.username:
             print("You are deleting your own account. This will log you out and permanently remove access.")
-<<<<<<< HEAD
             confirm = input("Are you absolutely sure you want to delete your account? Type 'yes' to confirm: ")
-=======
-            confirm = input("Are you absolutely sure you want to delete your account? Type 'yes' to confirm: ").strip().lower()
->>>>>>> 8f4348ff2208f4ca75f29c87418e154ec9c02e45
 
             if confirm == 'yes':
                 self.logger.writelog(
@@ -778,7 +774,6 @@ class SuperAdministrator(User):
     def searchscooter(self):
         return self.scooter_handler.search_scooter(self.username)
 
-<<<<<<< HEAD
     def addserviceengineer(self):
         u = input("New Service Engineer Username (must be between 8-10 char): ")
         p = input("New Service Engineer Password (12-30 characters, must include lowercase, uppercase, digit, special character): ")
@@ -786,17 +781,6 @@ class SuperAdministrator(User):
         l = input("New Service Engineer Last Name: ")
         if self._manage_user_account(u, p, f, l, "ServiceEngineer", "Creating a New Service Engineer"):
             if self._create_user_record(u, p, f, l, "ServiceEngineer"):
-=======
-    # def mark_scooter_out_of_service(self, serial_number, reason=""):
-    #     self.scooter_handler.mark_scooter_out_of_service(serial_number, self.username, reason)
-
-    # def mark_scooter_in_service(self, serial_number):
-    #     self.scooter_handler.mark_scooter_in_service(serial_number, self.username)
-
-    def addserviceengineer(self, username, password, firstname, lastname):
-        if self._manage_user_account(username, password, firstname, lastname, "ServiceEngineer", "Creating a New Service Engineer"):
-            if self._create_user_record(username, password, firstname, lastname, "ServiceEngineer"):
->>>>>>> 8f4348ff2208f4ca75f29c87418e154ec9c02e45
                 print("Service Engineer was successfully added")
                 self.logger.writelog(self.username, "Added Service Engineer", f"New Service Engineer '{u}' created.")
 
@@ -879,7 +863,6 @@ class SuperAdministrator(User):
         self.logger.writelog(self.username, "View Users", "Viewed all system users and roles.")
 
     def handle_menu_choice(self, choice):
-<<<<<<< HEAD
         if   choice == '3':  self.addsystemadmin()
         elif choice == '4':  self.changesystemadmininfo()
         elif choice == '5':  self.deletesystemadmin()
@@ -903,150 +886,25 @@ class SuperAdministrator(User):
         elif choice == '23': self.deletescooter()
         elif choice == '24': self.searchscooter()
         else: print("That's not a valid option. Please try again.")
-=======
-        if choice == '3':
-            u = input("New System Admin Username (8-10 chars, must start with a letter or _, allowed: a-z, 0-9, _, ', .): ")
-            p = input("New System Admin Password (12-30 chars, must include lowercase, uppercase, digit, special char): ")
-            f = input("New System Admin First Name: ")
-            l = input("New System Admin Last Name: ")
-            self.addsystemadmin(u, p, f, l)
-
-        elif choice == '4':
-            u = input("Username of System Admin to update: ")
-            new_u = input("New Username (leave empty to skip, (8-10 chars, must start with a letter or _, allowed: a-z, 0-9, _, ', .)): ")
-            new_f = input("New First Name (leave empty to skip): ")
-            new_l = input("New Last Name (leave empty to skip): ")
-            
-            data = {}
-            if new_u: data['username'] = new_u
-            if new_f: data['first_name'] = new_f
-            if new_l: data['last_name'] = new_l
-
-            self.changesystemadmininfo(u, data)
-
-        elif choice == '5':
-            u = input("Username of System Admin to delete: ")
-            self.deletesystemadmin(u)
-
-        elif choice == '6':
-            u = input("Username of System Admin to reset password: ")
-            new_p = input("New password for System Admin (12-30 chars, must include lowercase, uppercase, digit, special char): ")
-            self.resetpasswordsysadmin(u, new_p)
-
-        elif choice == '7':
-            sa = input("Enter System Admin username for restore code: ")
-            self.createrestorecode(sa)
-
-        elif choice == '8':
-            self.revokerestorecode()
-
-        elif choice == '9':
-            u = input("New Service Engineer Username (must be between 8-10 char): ")
-            p = input("New Service Engineer Password (12-30 characters, must include lowercase, uppercase, digit, special character): ")
-            f = input("New Service Engineer First Name: ")
-            l = input("New Service Engineer Last Name: ")
-            self.addserviceengineer(u, p, f, l)
-
-        elif choice == '10':
-            u = input("Username of Service Engineer to update: ")
-            nf = input("New First Name (leave empty to skip): ")
-            nl = input("New Last Name (leave empty to skip): ")
-            nu = input("New Username (leave empty to skip, 8-10 chars, must start with a letter or _, allowed: a-z, _, ', .): ")
-            data = {}
-            if nf: data['first_name'] = nf
-            if nl: data['last_name'] = nl
-            if nu: data['username'] = nu
-            self.updateserviceengineerinfo(u, data)
-
-        elif choice == '11':
-            u = input("Username of Service Engineer to delete: ")
-            self.deleteserviceengineer(u)
-
-        elif choice == '12':
-            u = input("Username of Service Engineer to reset password: ")
-            np = input("New password for Service Engineer (12-30 chars, must include lowercase, uppercase, digit, special char): ")
-            self.resetengineerpassword(u, np)
-
-        elif choice == '13':
-            self.viewallusers()
-
-        elif choice == '14':
-            self.viewlogs()
-
-        elif choice == '15':
-            self.makebackup()
-
-        elif choice == '16':
-            self.restoresystembackup()
-
-        elif choice == '17':
-            self.addtraveller()
-
-        elif choice == '18':
-            self.updatetraveller()
-
-        elif choice == '19':
-            self.deletetraveller()
-
-        elif choice == '20':
-            self.searchtraveller()
-
-        elif choice == '21':
-            self.addscooter()
-
-        elif choice == '22':
-            self.updatescooter()
-
-        elif choice == '23':
-            self.deletescooter()
-        
-        elif choice == '24':
-            self.searchscooter()
-        else:
-            print("That's not a valid option. Please try again.")
->>>>>>> 8f4348ff2208f4ca75f29c87418e154ec9c02e45
 
 
     def show_menu(self):
         print("1. Change My Password")
         print("2. Log Out")
-<<<<<<< HEAD
-=======
-
-
-        print("\n--- System Administrator Management ---")
->>>>>>> 8f4348ff2208f4ca75f29c87418e154ec9c02e45
         print("3. Add New System Administrator")
         print("4. Update System Administrator Info")
         print("5. Delete System Administrator")
         print("6. Reset System Administrator Password")
-<<<<<<< HEAD
         print("7. Generate Restore Code for System Admin Backup")
         print("8. Revoke Restore Code")
-=======
-
-        print("7. Generate Restore Code for System Admin Backup")
-        print("8. Revoke Restore Code")
-
->>>>>>> 8f4348ff2208f4ca75f29c87418e154ec9c02e45
         print("9. Add New Service Engineer")
         print("10. Update Service Engineer Info")
         print("11. Delete Service Engineer")
         print("12. Reset Service Engineer Password")
-<<<<<<< HEAD
-=======
-
-        print("\n--- Logs & Backup ---")
->>>>>>> 8f4348ff2208f4ca75f29c87418e154ec9c02e45
         print("13. View All Users")
         print("14. View All System Logs")
         print("15. Make Backup")
         print("16. Restore Backup from Backup")
-<<<<<<< HEAD
-=======
-
-        print("\n--- Shared Traveller & Scooter Management ---")
->>>>>>> 8f4348ff2208f4ca75f29c87418e154ec9c02e45
         print("17. Add New Traveller")
         print("18. Update Traveller Info")
         print("19. Delete Traveller")
