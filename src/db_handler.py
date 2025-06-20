@@ -1,4 +1,5 @@
 import sqlite3
+import re
 import bcrypt
 from cryptography.fernet import Fernet
 import os
@@ -16,6 +17,33 @@ class DBHandler:
             os.makedirs(db_dir)
         self.connect_to_db()
 
+    def _sanitize_identifier(self, identifier: str) -> str:
+        """Sanitize table/column names to prevent SQL injection"""
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', identifier):
+            raise ValueError(f"Invalid identifier: {identifier}")
+        return identifier
+
+    def _validate_table_name(self, table_name: str) -> bool:
+        """Validate that table name is safe"""
+        valid_tables = {'users', 'travellers', 'scooters', 'logs', 'restore_codes'}
+        return table_name in valid_tables
+
+    def _is_query_safe(self, query: str) -> bool:
+        """Basic check for potentially dangerous SQL patterns"""
+        dangerous_patterns = [
+            r";\s*--", r";\s*#",
+            r"\b(?:DROP|TRUNCATE|ALTER|CREATE|REPLACE)\b",
+            r"\b(?:UNION|HAVING)\b",
+            r"\b(?:EXEC|EXECUTE|DECLARE)\b",
+            r"\b(?:XP_|SP_)\w+",
+        ]
+        
+        query_upper = query.upper()
+        for pattern in dangerous_patterns:
+            if re.search(pattern, query_upper, re.IGNORECASE):
+                return False
+        return True
+    
     def connect_to_db(self):
         try:
             self.conn = sqlite3.connect(self.db_name)
@@ -82,7 +110,6 @@ class DBHandler:
         self.cursor.execute('''
         CREATE TABLE IF NOT EXISTS logs (
             log_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date DATE,
             time TIME,
             username TEXT,
             activity TEXT,
@@ -125,6 +152,9 @@ class DBHandler:
             print("Can't run query, database connection not found")
             return None
         try:
+            if not self._is_query_safe(query):
+                raise ValueError("Potentially unsafe query detected")
+            
             self.cursor.execute(query, params)
             self.conn.commit()
             if get_all:
@@ -146,6 +176,7 @@ class DBHandler:
         values = []
 
         for col, val in record.items():
+            col = self._sanitize_identifier(col)
             columns.append(col)
             placeholders.append("?")
 
@@ -175,6 +206,9 @@ class DBHandler:
         if not self.conn:
             print("Can't get data, no database connection")
             return []
+        
+        if not self._validate_table_name(tablename):
+            raise ValueError(f"Invalid table name: {tablename}")
 
         query = f"SELECT * FROM {tablename}"
         params = []
@@ -182,6 +216,7 @@ class DBHandler:
         if filters:
             where_parts = []
             for col, val in filters.items():
+                col = self._sanitize_identifier(col)
                 where_parts.append(f"{col} = ?")
                 params.append(val)
             query += " WHERE " + " AND ".join(where_parts)
@@ -225,24 +260,34 @@ class DBHandler:
     
 
     def getrawdata(self, table_name, filters=None):
+        if not self.conn:
+            raise RuntimeError("Database connection not established")
+            
+        if not self._validate_table_name(table_name):
+            raise ValueError(f"Invalid table name: {table_name}")        
+        
         try:
-            cursor = self.conn.cursor()
             query = f"SELECT * FROM {table_name}"
             params = []
 
             if filters:
                 conditions = []
                 for key, value in filters.items():
+                    key = self._sanitize_identifier(key)
                     conditions.append(f"{key} = ?")
                     params.append(value)
                 query += " WHERE " + " AND ".join(conditions)
 
-            cursor.execute(query, params)
-            records = cursor.fetchall()
+            rows = self.runquery(query, tuple(params), get_all=True)
+            if not rows:
+                return []
 
-            columns = [desc[0] for desc in cursor.description]
-            results = [dict(zip(columns, row)) for row in records]
-
+            column_names = [desc[0] for desc in self.cursor.description]
+            results = []
+            
+            for row in rows:
+                results.append(dict(zip(column_names, row)))
+                
             return results
 
         except Exception as e:
@@ -260,44 +305,62 @@ class DBHandler:
         if not self.conn:
             print("Can't update, no database connection")
             return
+        
+        if not self._validate_table_name(tablename):
+            raise ValueError(f"Invalid table name: {tablename}")
 
-        set_parts = []
-        values = []
 
-        for col, val in new_info.items():
-            set_parts.append(f"{col} = ?")
+        try:
+            idcolumn = self._sanitize_identifier(idcolumn)
+            set_parts = []
+            values = []
 
-            if tablename == 'travellers' and col in [
-                'first_name', 'last_name', 'birthday', 'gender',
-                'street_name', 'house_number', 'zip_code', 'city',
-                'email', 'mobile_phone', 'driving_license'
-            ]:
-                values.append(self.encryptdata(str(val)))
+            for col, val in new_info.items():
+                col = self._sanitize_identifier(col)
+                set_parts.append(f"{col} = ?")
 
-            elif tablename == 'users' and col in ['username', 'first_name', 'last_name']:
-                values.append(self.encryptdata(str(val)))
+                if tablename == 'travellers' and col in [
+                    'first_name', 'last_name', 'birthday', 'gender',
+                    'street_name', 'house_number', 'zip_code', 'city',
+                    'email', 'mobile_phone', 'driving_license'
+                ]:
+                    values.append(self.encryptdata(str(val)))
 
-            elif tablename == 'scooters' and col == 'location':
-                values.append(self.encryptdata(str(val)))
+                elif tablename == 'users' and col in ['username', 'first_name', 'last_name']:
+                    values.append(self.encryptdata(str(val)))
 
-            elif tablename == 'logs' and col in ['username', 'activity', 'details']:
-                values.append(self.encryptdata(str(val)))
+                elif tablename == 'scooters' and col == 'location':
+                    values.append(self.encryptdata(str(val)))
 
-            else:
-                values.append(val)
+                elif tablename == 'logs' and col in ['username', 'activity', 'details']:
+                    values.append(self.encryptdata(str(val)))
 
-        values.append(id_value)
-        query = f"UPDATE {tablename} SET {', '.join(set_parts)} WHERE {idcolumn} = ?"
-        self.runquery(query, tuple(values))
+                else:
+                    values.append(val)
+
+            values.append(id_value)
+            query = f"UPDATE {tablename} SET {', '.join(set_parts)} WHERE {idcolumn} = ?"
+            self.runquery(query, tuple(values))
+        except Exception as e:
+            print(f"Error updating record: {e}")
+            raise
 
 
     def deleterecord(self, table_name, id_column, id_value):
         if not self.conn:
             print("Can't delete record, no database connection active.")
             return
+        
+        if not self._validate_table_name(table_name):
+            raise ValueError(f"Invalid table name: {table_name}")
                 
-        query = f"DELETE FROM {table_name} WHERE {id_column} = ?"
-        self.runquery(query, (id_value,))
+        try:
+            id_column = self._sanitize_identifier(id_column)
+            query = f"DELETE FROM {table_name} WHERE {id_column} = ?"
+            self.runquery(query, (id_value,))
+        except Exception as e:
+            print(f"Error deleting record: {e}")
+            raise
 
     def get_users_by_role(self, role):
         if not self.conn:
@@ -305,10 +368,8 @@ class DBHandler:
             return []
 
         try:
-            cursor = self.conn.cursor()
             query = "SELECT username, first_name, last_name, role FROM users WHERE role = ?"
-            cursor.execute(query, (role,))
-            rows = cursor.fetchall()
+            rows = self.runquery(query, (role,), get_all=True)
 
             if not rows:
                 print(f"No users found with role: {role}")
@@ -329,5 +390,3 @@ class DBHandler:
         except Exception as e:
             print(f"Error retrieving users by role: {e}")
             return []
-
-

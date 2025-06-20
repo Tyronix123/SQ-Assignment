@@ -151,7 +151,6 @@ class UmMembers:
             print(f"\nLogged in as: {self.loggedinuser.getmyusername()} ({role})")
             self.loggedinuser.show_menu()
             choice = input("Choose an option: ")
-            self.clear_console()
             if choice == '1':
                 if role == 'SuperAdministrator':
                     print("SuperAdministrator cannot change their password.")

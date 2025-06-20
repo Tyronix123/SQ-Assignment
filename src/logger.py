@@ -1,7 +1,8 @@
 from datetime import datetime
+from db_handler import DBHandler
 
 class Logger:
-    def __init__(self, db_handler):
+    def __init__(self, db_handler: DBHandler):
         self.db_handler = db_handler
         self.unseensuspiciouslogs = []
 

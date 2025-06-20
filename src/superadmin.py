@@ -237,21 +237,25 @@ class SuperAdministrator(User):
 
 
 
+
     def _reset_password(self, username_reset, newpassword, role):
         print(f"\n-- {role} password reset: {username_reset} --")
         if not self.db_handler:
             print("Error: Database is not available.")
             return False
 
-        all_users = self.db_handler.getdata('users')
-        target_user = None
+        # Get all raw users (encrypted usernames)
+        raw_users = self.db_handler.getrawdata('users')
+        target_user_raw = None
 
-        for user in all_users:
-            if user['username'].lower() == username_reset.lower() and user['role'] == role:
-                target_user = user
+        # Find user by decrypting usernames and matching role
+        for raw_user in raw_users:
+            decrypted_username = self.db_handler.decryptdata(raw_user['username'])
+            if decrypted_username.lower() == username_reset.lower() and raw_user['role'] == role:
+                target_user_raw = raw_user
                 break
 
-        if not target_user:
+        if not target_user_raw:
             print(f"Error: {role} '{username_reset}' not found.")
             self.logger.writelog(
                 self.username,
@@ -274,11 +278,11 @@ class SuperAdministrator(User):
         hashed_password = self.makepasswordhash(newpassword)
 
         try:
-            encrypted_username = self.db_handler.encryptdata(username_reset)
+            # Use the original encrypted username for the update
             self.db_handler.updateexistingrecord(
                 'users',
                 'username',
-                encrypted_username,
+                target_user_raw['username'],  # encrypted username
                 {'password_hash': hashed_password}
             )
             print(f"Password for {role} '{username_reset}' has been successfully reset!")
@@ -297,6 +301,8 @@ class SuperAdministrator(User):
                 issuspicious=True
             )
             return False
+
+
 
     def list_users_by_role(self, role):
         users = self.db_handler.get_users_by_role(role)
@@ -381,7 +387,7 @@ class SuperAdministrator(User):
             sysadmin_to_delete = selected_admin['username']
         else:
             sysadmin_to_delete = self.username
-            
+
         self._delete_user(sysadmin_to_delete, "SystemAdministrator", "Can't delete Super Administrator account")
         self.logger.writelog(self.username, "Delete SystemAdmin", f"Deleted system administrator: {sysadmin_to_delete}")
     
@@ -415,10 +421,6 @@ class SuperAdministrator(User):
                 print("No system administrators found.")
                 self.logger.writelog(self.username, "Generate Restore Code Failed", "No system administrators found", issuspicious=True)
                 return
-
-            print("Select a System Administrator:")
-            for idx, admin in enumerate(system_admins, start=1):
-                print(f"{idx}. {admin['first_name']} {admin['last_name']} (Username: {admin['username']})")
 
             selected_admin = self.select_user_from_list(system_admins, "Select a system administrator to create a restore code for: ")
             if not selected_admin:
@@ -574,9 +576,18 @@ class SuperAdministrator(User):
     def makebackup(self):
         print("\n--- Initiating System Backup ---")
 
-        restore_codes = self.db_handler.getdata('restore_codes', {'used': 0})
-        if not restore_codes:
+        all_restore_codes = self.db_handler.getdata('restore_codes', {'used': 0})
+        if not all_restore_codes:
             print("No available restore codes found.")
+            return
+
+        restore_codes = [
+            rc for rc in all_restore_codes 
+            if self.db_handler.decryptdata(rc['for_user']) == self.username
+        ]
+
+        if not restore_codes:
+            print("No available restore codes found for your account.")
             return
 
         print("\nAvailable Restore Codes:")
@@ -600,6 +611,11 @@ class SuperAdministrator(User):
         if is_revoked == 1:
             print("Selected restore code is revoked.")
             self.logger.writelog(self.username, "Backup Attempt Failed", f"Restore code '{restorecode}' is revoked", issuspicious=True)
+            return
+
+        if self.username != restore_for_user and self.role == 'superadmin':
+            print("Superadmin cannot make a backup for another system administrator.")
+            self.logger.writelog(self.username, "Backup Attempt Failed", f"Unauthorized backup attempt for '{restore_for_user}'", issuspicious=True)
             return
 
         if self.username != restore_for_user and self.username == 'superadmin':
@@ -633,8 +649,6 @@ class SuperAdministrator(User):
         except Exception as e:
             print(f"\nBackup failed: {e}")
             self.logger.writelog(self.username, "System Backup Failed", f"Exception: {e}", issuspicious=True)
-
-
         
     def restoresystembackup(self) -> None:
         print("\n--- Restore a System Backup ---")

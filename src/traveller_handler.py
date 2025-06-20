@@ -100,38 +100,40 @@ class TravellerHandler:
         selected_traveller = all_travellers[choice]
         cid = selected_traveller['customer_id']
 
-        data = {}
-        print("\nEnter new values (leave empty to skip):")
-        em = input("New Email: ")
-        if em:
-            data['email'] = em
+        print("\nLeave a field empty to skip updating it.")
+        updates = {}
+        updates['first_name']       = input("New First Name: ")
+        updates['last_name']        = input("New Last Name: ")
+        updates['gender']           = input("New Gender (Male/Female): ")
+        updates['birthday']         = input("New Birthday (YYYY-MM-DD): ")
+        updates['driving_license']  = input("New Driving‑Licence (format XXDDDDDDD or XDDDDDDDD): ")
+        updates['email']            = input("New Email: ")
 
-        ph = input("New Mobile Phone (8 digits): ")
-        if ph:
-            if self.input_validation.is_valid_phone(ph):
-                data['mobile_phone'] = "+31-6-" + ph
+        phone_in = input("New Mobile Phone (8 digits): ")
+        if phone_in:
+            if self.input_validation.is_valid_phone(phone_in):
+                updates['mobile_phone'] = "+31-6-" + phone_in
             else:
-                print("Invalid phone format. Skipping update for phone.")
+                print("Invalid phone format. Skipping phone update.")
 
-        zp = input("New Zip Code: ")
-        if zp:
-            data['zip_code'] = zp
+        updates['zip_code']     = input("New Zip Code (DDDDXX): ")
+        updates['city']         = input(f"New City (choose from {', '.join(self.dutch_cities)}): ")
+        updates['street_name']  = input("New Street Name: ")
+        updates['house_number'] = input("New House Number: ")
 
-        ct = input(f"New City (choose from {', '.join(self.dutch_cities)}): ")
-        if ct:
-            data['city'] = ct
+        updates = {k: v for k, v in updates.items() if v}
 
-        if not data:
+        if not updates:
             print("No updates provided.")
             return
 
-        self.db_handler.updateexistingrecord('travellers', 'customer_id', cid, data)
+        self.db_handler.updateexistingrecord('travellers', 'customer_id', cid, updates)
         print("Traveller information updated successfully.")
 
         self.logger.writelog(
             username,
             "Update Traveller",
-            f"Updated traveller ID '{cid}' with new data: {data}"
+            f"Updated traveller ID '{cid}' with new data: {updates}"
         )
 
 
@@ -192,7 +194,15 @@ class TravellerHandler:
             'first_name': 'First Name',
             'last_name': 'Last Name',
             'email': 'Email',
-            'mobile_phone': 'Phone'
+            'mobile_phone': 'Phone',
+            'gender': 'Gender',
+            'birthday': 'Birthday',
+            'zip_code': 'Zip Code',
+            'city': 'City',
+            'street_name': 'Street',
+            'house_number': 'House Number',
+            'driving_license': 'Driving License',
+            'registration_date': 'Registration Date'
         }
 
         all_travellers = self.db_handler.getdata('travellers') or []
@@ -225,15 +235,21 @@ class TravellerHandler:
             for result in results:
                 t = result['traveller']
                 print(
-                    f"  ID: {t.get('customer_id')}, Name: {t.get('first_name')} {t.get('last_name')}, "
-                    f"Email: {t.get('email')}, Phone: {t.get('mobile_phone')}")
+                    f"ID: {t.get('customer_id')}, "
+                    f"Name: {t.get('first_name')} {t.get('last_name')}, "
+                    f"Email: {t.get('email')}, "
+                    f"Phone: {t.get('mobile_phone')}, "
+                    f"Gender: {t.get('gender')}, "
+                    f"Birthday: {t.get('birthday')}, "
+                    f"Address: {t.get('street_name')} {t.get('house_number')}, {t.get('zip_code')} {t.get('city')}, "
+                    f"License: {t.get('driving_license')}, "
+                    f"Registration Date: {t.get('registration_date')}"
+                )
                 print(f"    (Matched on {result['matched_field']}: {result['matched_value']})")
 
-            self.logger.writelog(username, "Search Traveller",
-                                f"Searched for '{query}', found {len(results)} results.")
+            self.logger.writelog(username, "Search Traveller", f"Searched for '{query}', found {len(results)} results.")
         else:
             print("No travellers found matching your search.")
-            self.logger.writelog(username, "Search Traveller",
-                                f"Searched for '{query}', traveller not found.")
+            self.logger.writelog(username, "Search Traveller", f"Searched for '{query}', traveller not found.")
 
         return results

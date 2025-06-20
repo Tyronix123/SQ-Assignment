@@ -168,12 +168,26 @@ class ScooterHandler:
         print(f"\n--- Updating Scooter (Service Engineer Mode): {serialnumber} ---")
         state_of_charge = input("State of Charge (%): ")
         target_range_input = input("Target Range SoC (min,max (%)): ")
-        location_input = input("Location (lat,long) (5 decimals): ")
+        while True:
+            location_input = input("Location (lat,long) (5 decimals): ")
+            if location_input == "":
+                lat_str = long_str = ""
+                break
+            parts = [p.strip() for p in location_input.split(',')]
+            if len(parts) == 2:
+                lat_str, long_str = parts
+                try:
+                    float(lat_str)
+                    float(long_str)
+                    break
+                except ValueError:
+                    print("Latitude and longitude must be valid numbers (e.g. 51.92250, 4.47917) or leave empty to skip.")
+            else:
+                print("Please enter latitude and longitude separated by a comma (e.g. 51.92250, 4.47917) or leave empty to skip.")        
         out_of_service_status = input("Out of Service (0/1): ")
         mileage = input("Mileage (km): ")
         last_maintenance_date = input("Last Maintenance (YYYY-MM-DD): ")
 
-        lat_str, long_str = location_input.split(',')
         target_min_soc, target_max_soc = target_range_input.split(',')
 
         newinfo = {
@@ -193,7 +207,7 @@ class ScooterHandler:
         }
 
         try:
-            cleaned_data = self.input_handler.handle_scooter_data_limit(newinfo, username)
+            cleaned_data = self.input_handler.handle_scooter_data_limit(newinfo)
         except ValueError as ve:
             print(f"Validation error during cleaning: {ve}. Update cancelled.")
             self.logger.writelog(username, "Update Scooter Failed", f"Validation error for scooter '{serialnumber}': {ve}", is_suspicious=True)
@@ -264,7 +278,7 @@ class ScooterHandler:
 
         print("\n--- List of Scooters ---")
         for idx, scooter in enumerate(all_scooters, start=1):
-            print(f"{idx}. Serial: {scooter['serial_number']} | {scooter['brand']} {scooter['model']} | Top Speed: {scooter['top_speed']} km/h | SoC: {scooter['soc']}%")
+            print(f"{idx}. Serial: {scooter['serial_number']} | {scooter['brand']} {scooter['model']} | Top Speed: {scooter['top_speed']} km/h | SoC: {scooter['soc']}% | Location: {scooter['location']}")
 
         while True:
             try:
@@ -281,15 +295,28 @@ class ScooterHandler:
         print(f"\n--- Updating Scooter: {serialnumber} ---")
         brand = input("Scooter Brand: ")
         model = input("Scooter Model: ")
-        serial_number = input("Serial Number: ")
+        serial_number = input("Scooter Serial Number (10-17 alphanumeric): ")
         top_speed = input("Top Speed (km/h): ")
         battery_capacity = input("Battery Capacity (Wh): ")
         state_of_charge = input("State of Charge (%): ")
         target_range_input = input("Target Range SoC (min,max %) (e.g. 50,80): ")
         old_lat, old_lon = [s.strip() for s in selected_scooter['location'].split(',')]
-
-        lat_str = input("Enter Latitude of the location (5 decimals): ").strip() or old_lat
-        long_str = input("Enter Longitude of the location (5 decimals): ").strip() or old_lon
+        while True:
+            location_input = input("Location (lat,long) (5 decimals): ")
+            if location_input == "":
+                lat_str = long_str = ""
+                break
+            parts = [p.strip() for p in location_input.split(',')]
+            if len(parts) == 2:
+                lat_str, long_str = parts
+                try:
+                    float(lat_str)
+                    float(long_str)
+                    break
+                except ValueError:
+                    print("Latitude and longitude must be valid numbers (e.g. 51.92250, 4.47917) or leave empty to skip.")
+            else:
+                print("Please enter latitude and longitude separated by a comma (e.g. 51.92250, 4.47917) or leave empty to skip.")
         out_of_service_status = input("Out of Service (0/1): ")
         mileage = input("Mileage (km): ")
         last_maintenance_date = input("Last Maintenance (YYYY-MM-DD): ")
@@ -416,7 +443,7 @@ class ScooterHandler:
         except Exception as e:
             print(f"Error while deleting scooter '{serialnumber}': {e}")
             self.logger.writelog(username, "Delete Scooter Failed", f"Database error while deleting scooter '{serialnumber}': {e}", is_suspicious=True)
-
+    
     def search_scooter(self, username):
         query = input("Enter search query for scooters (leave empty to list all): ")
 
@@ -433,8 +460,13 @@ class ScooterHandler:
             'top_speed': 'Top Speed',
             'battery_capacity': 'Battery Capacity',
             'soc': 'State of Charge',
-            'out_of_service': 'Out of Service'
+            'soc_range': 'State of Charge Range',
+            'location': 'Location',
+            'date_last_used': 'Date Last Used',
+            'out_of_service': 'Out of Service',
+            'in_service_date': 'In Service Date'
         }
+
 
         all_scooters = self.db_handler.getdata('scooters') or []
         results = []
@@ -466,117 +498,17 @@ class ScooterHandler:
             for result in results:
                 s = result['scooter']
                 print(
-                    f"  Serial: {s.get('serial_number')}, Brand: {s.get('brand')}, Model: {s.get('model')}, "
-                    f"Top Speed: {s.get('top_speed')} km/h, SoC: {s.get('soc')}%, Out of Service: {s.get('out_of_service')}")
+                    f"Serial: {s.get('serial_number')}, Brand: {s.get('brand')}, Model: {s.get('model')}, "
+                    f"Top Speed: {s.get('top_speed')} km/h, Battery: {s.get('battery_capacity')} Wh, SoC: {s.get('soc')}%, "
+                    f"SoC Range: {s.get('soc_range')}%, Location: {s.get('location')}, Last Used: {s.get('date_last_used')}, "
+                    f"Out of Service: {s.get('out_of_service')}, "
+                    f"In Service Date: {s.get('in_service_date')}"
+                )
                 print(f"    (Matched on {result['matched_field']}: {result['matched_value']})")
 
-            self.logger.writelog(username, "Search Scooter",
-                                f"Searched for '{query}', found {len(results)} results.")
+            self.logger.writelog(username, "Search Scooter", f"Searched for '{query}', found {len(results)} results.")
         else:
             print("No scooters found matching your search.")
-            self.logger.writelog(username, "Search Scooter",
-                                f"Searched for '{query}', scooter not found.")
+            self.logger.writelog(username, "Search Scooter", f"Searched for '{query}', scooter not found.")
 
         return results
-
-
-    # def search_scooter(self, query, username):
-    #     print(f"\nSearching Scooters for: '{query}'")
-
-    #     if not self.db_handler:
-    #         print("Error: Database not connected. Can't search scooters.")
-    #         return []
-
-    #     SEARCH_FIELDS = {
-    #         'serial_number': 'Serial Number',
-    #         'brand': 'Brand',
-    #         'mo ': 'Model',
-    #     }
-
-    #     all_scooters = self.db_handler.getdata('scooters')
-    #     results = []
-
-    #     if not query:
-    #         print("No search term provided, showing all scooters.")
-    #         results = all_scooters
-    #     else:
-    #         query = query.lower()
-    #         for scooter in all_scooters:
-    #             matched_field = None
-    #             for field, display_name in SEARCH_FIELDS.items():
-    #                 field_value = str(scooter.get(field, '')).lower()
-    #                 if query in field_value:
-    #                     matched_field = display_name
-    #                     break
-
-    #             if matched_field:
-    #                 results.append({
-    #                     'scooter': scooter,
-    #                     'matched_field': matched_field,
-    #                     'matched_value': scooter.get(field)
-    #                 })
-
-    #     if results:
-    #         print(f"Found {len(results)} scooter(s):")
-    #         for result in results:
-    #             s = result['scooter']
-    #             print(
-    #                 f"  Serial: {s.get('serial_number')}, Brand: {s.get('brand')}, Model: {s.get('model')}, "
-    #                 f"SoC: {s.get('soc')}%, Location: {s.get('location')}")
-    #             print(f"    (Matched on {result['matched_field']}: {result['matched_value']})")
-
-    #         self.logger.writelog(username, "Search Scooter", f"Searched for '{query}', found {len(results)} results.")
-    #     else:
-    #         print("No scooters found matching your search.")
-    #         self.logger.writelog(username, "Search Scooter", f"Searched for '{query}', scooter not found.")
-    #     return results
-
-    # def mark_scooter_out_of_service(self, serial_number, username, reason=""):
-    #     print(f"\nMarking Scooter {serial_number} as Out of Service")
-    #     if not self.db_handler:
-    #         print("Error: Database is not connected.")
-    #         return
-
-    #     existing_scooter = self.db_handler.getdata('scooters', {'serial_number': serial_number})
-    #     if not existing_scooter:
-    #         print(f"Error: Scooter with serial '{serial_number}' not found.")
-    #         self.logger.writelog(username, "Scooter OOS Failed", 
-    #                            f"Scooter '{serial_number}' not found", issuspicious=True)
-    #         return
-
-    #     try:
-    #         self.db_handler.updateexistingrecord('scooters', 'serial_number', serial_number, {
-    #             'out_of_service': 1,
-    #             'last_maintenance': datetime.date.today().isoformat()
-    #         })
-    #         print(f"Scooter {serial_number} marked as out of service.")
-    #         self.logger.writelog(username, "Scooter OOS", 
-    #                            f"Marked scooter '{serial_number}' as out of service. Reason: {reason}")
-    #     except Exception as e:
-    #         print(f"Couldn't update scooter status. Error: {e}")
-    #         self.logger.writelog(username, "Scooter OOS Failed", f"Error: {e}", issuspicious=True)
-
-    def mark_scooter_in_service(self, serial_number, username):
-        print(f"\nMarking Scooter {serial_number} as In Service")
-        if not self.db_handler:
-            print("Error: Database is not connected.")
-            return
-
-        existing_scooter = self.db_handler.getdata('scooters', {'serial_number': serial_number})
-        if not existing_scooter:
-            print(f"Error: Scooter with serial '{serial_number}' not found.")
-            self.logger.writelog(username, "Scooter IS Failed", 
-                               f"Scooter '{serial_number}' not found", issuspicious=True)
-            return
-
-        try:
-            self.db_handler.updateexistingrecord('scooters', 'serial_number', serial_number, {
-                'out_of_service': 0,
-                'last_maintenance': datetime.date.today().isoformat()
-            })
-            print(f"Scooter {serial_number} marked as in service.")
-            self.logger.writelog(username, "Scooter IS", 
-                               f"Marked scooter '{serial_number}' as in service")
-        except Exception as e:
-            print(f"Couldn't update scooter status. Error: {e}")
-            self.logger.writelog(username, "Scooter IS Failed", f"Error: {e}", issuspicious=True)
