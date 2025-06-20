@@ -301,12 +301,13 @@ class ScooterHandler:
         battery_capacity = input("Battery Capacity (Wh): ")
         state_of_charge = input("State of Charge (%): ")
         target_range_input = input("Target Range SoC (min,max %) (e.g. 50,80): ")
-        location_input = input("Location (lat,long) (5 decimals): ")
+        old_lat, old_lon = [s.strip() for s in selected_scooter['location'].split(',')]
+
+        lat_str = input("Enter Latitude of the location (5 decimals): ").strip() or old_lat
+        long_str = input("Enter Longitude of the location (5 decimals): ").strip() or old_lon
         out_of_service_status = input("Out of Service (0/1): ")
         mileage = input("Mileage (km): ")
         last_maintenance_date = input("Last Maintenance (YYYY-MM-DD): ")
-
-        lat_str, long_str = location_input.split(',')
         target_min_soc, target_max_soc = target_range_input.split(',')
 
         newinfo = {
