@@ -173,29 +173,15 @@ class ScooterHandler:
         mileage = input("Mileage (km): ")
         last_maintenance_date = input("Last Maintenance (YYYY-MM-DD): ")
 
-        while True:
-            location_input = input("Location (lat,long) (5 decimals): ")
-            if location_input == "":
-                lat_str = long_str = ""
-                break
-            parts = [p.strip() for p in location_input.split(',')]
-            if len(parts) == 2:
-                lat_str, long_str = parts
-                try:
-                    float(lat_str)
-                    float(long_str)
-                    break
-                except ValueError:
-                    print("Latitude and longitude must be valid numbers (e.g. 51.92250, 4.47917) or leave empty to skip.")
-            else:
-                print("Please enter latitude and longitude separated by a comma (e.g. 51.92250, 4.47917) or leave empty to skip.")
+        lat_str, long_str = location_input.split(',')
+        target_min_soc, target_max_soc = target_range_input.split(',')
 
         newinfo = {
             'serial_number': serialnumber,
             'soc': state_of_charge,
             'soc_range': {
                 'target_min_soc': target_min_soc,
-                'target_max_soc': target_max_socy
+                'target_max_soc': target_max_soc
             },
             'location': {
                 'latitude': lat_str,
@@ -268,7 +254,6 @@ class ScooterHandler:
         except Exception as e:
             print(f"Error while updating scooter '{serialnumber}': {e}")
             self.logger.writelog(username, "Update Scooter Failed", f"Database error: {e}", is_suspicious=True)
-
 
     def update_scooter(self, username):
         all_scooters = self.db_handler.getdata('scooters')
