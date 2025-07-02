@@ -654,7 +654,7 @@ class SuperAdministrator(User):
         backup_file   = code_record["backup_file_name"]
 
         if not backup_file:
-            print("Backup file name missing in restore‑code record.")
+            print("Backup file name missing in restore-code record.")
             return
 
         backup_dir  = os.path.join("src", "backup")
@@ -674,8 +674,8 @@ class SuperAdministrator(User):
             shutil.copy2(db_path, pre_copy)
             print(f"Saved current DB to '{pre_copy}'.")
         except Exception as e:
-            print(f"Could not create pre‑restore copy: {e}")
-            self.logger.writelog(self.getmyusername(), "Restore Backup Failed", f"Pre‑copy error {e}")
+            print(f"Could not create pre-restore copy: {e}")
+            self.logger.writelog(self.getmyusername(), "Restore Backup Failed", f"Pre-copy error {e}")
             return
 
         try:
@@ -689,10 +689,8 @@ class SuperAdministrator(User):
             })
 
             print("Database restored successfully.")
-            self.logger.writelog(self.getmyusername(), "Restore Backup",
-                f"Restored from {backup_file} ({backup_id}), "
-                f"pre‑copy at {pre_copy}",
-            )
+            self.logger.writelog(self.getmyusername(), "Restore Backup", f"Restored from {backup_file} ({backup_id}), " f"pre-copy at {pre_copy}",)
+            self.logout()
         except Exception as e:
             print(f"Restore failed: {e}")
             self.logger.writelog(self.getmyusername(), "Restore Backup Failed", str(e))

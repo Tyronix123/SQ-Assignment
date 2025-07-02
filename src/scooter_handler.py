@@ -18,14 +18,34 @@ class ScooterHandler:
             print("Error: Database is not connected. Can't add scooter.")
             return
 
-        serial_number = input("Scooter Serial Number (10-17 alphanumeric): ")
-        brand = input("Scooter Brand: ")
-        model = input("Scooter Model: ")
+        while True:
+            serial_number = input("Scooter Serial Number (10-17 alphanumeric): ")
+            try:
+                self.input_handler.clean_serial_number(serial_number)
+                break
+            except ValueError:
+                print("Please enter a valid serial number (10–17 characters, letters and numbers only).")
+
+        while True:
+            brand = input("Scooter Brand: ")
+            try:
+                self.input_handler.clean_brand(brand)
+                break
+            except ValueError:
+                print("Please enter a valid brand name (cannot be empty).")
+
+        while True:
+            model = input("Scooter Model: ")
+            try:
+                self.input_handler.clean_model(model)
+                break
+            except ValueError:
+                print("Please enter a valid model name (cannot be empty).")
 
         while True:
             top_speed = input("Top Speed (km/h): ")
             try:
-                float(top_speed)
+                self.input_handler.clean_top_speed(top_speed)
                 break
             except ValueError:
                 print("Please enter a valid number for top speed (e.g. 75).")
@@ -33,7 +53,7 @@ class ScooterHandler:
         while True:
             battery_capacity = input("Battery Capacity (Wh): ")
             try:
-                float(battery_capacity)
+                self.input_handler.clean_battery_capacity(battery_capacity)
                 break
             except ValueError:
                 print("Please enter a valid number for battery capacity (e.g. 200).")
@@ -41,7 +61,7 @@ class ScooterHandler:
         while True:
             state_of_charge = input("State of Charge (%): ")
             try:
-                float(state_of_charge)
+                self.input_handler.clean_soc(state_of_charge)
                 break
             except ValueError:
                 print("Please enter a valid number for state of charge (e.g. 80).")
@@ -51,7 +71,11 @@ class ScooterHandler:
             parts = [p.strip() for p in target_range_input.split(',')]
             if len(parts) == 2 and all(p.replace('.', '', 1).isdigit() for p in parts):
                 target_min_soc, target_max_soc = parts
-                break
+                try:
+                    self.input_handler.clean_target_soc_range(target_min_soc, target_max_soc)
+                    break
+                except ValueError:
+                    print("Please enter two numbers separated by a comma, e.g. 50,80.")
             else:
                 print("Please enter two numbers separated by a comma, e.g. 50,80.")
 
@@ -64,8 +88,7 @@ class ScooterHandler:
             if len(parts) == 2:
                 lat_str, long_str = parts
                 try:
-                    float(lat_str)
-                    float(long_str)
+                    self.input_handler.clean_location(lat_str, long_str)
                     break
                 except ValueError:
                     print("Latitude and longitude must be valid numbers (e.g. 51.92250, 4.47917) or leave empty to skip.")
@@ -74,20 +97,27 @@ class ScooterHandler:
 
         while True:
             out_of_service_status = input("Out of Service (0/1): ")
-            if out_of_service_status in ("0", "1"):
+            try:
+                self.input_handler.clean_out_of_service(out_of_service_status)
                 break
-            else:
+            except ValueError:
                 print("Please enter 0 (in service) or 1 (out of service).")
 
         while True:
             mileage = input("Mileage (km): ")
             try:
-                float(mileage)
+                self.input_handler.clean_mileage(mileage)
                 break
             except ValueError:
                 print("Please enter a valid number for mileage (e.g. 8000).")
 
-        last_maintenance_date = input("Last Maintenance (YYYY-MM-DD): ")
+        while True:
+            last_maintenance_date = input("Last Maintenance (YYYY-MM-DD): ")
+            try:
+                self.input_handler.clean_last_maintenance_date(last_maintenance_date)
+                break
+            except ValueError:
+                print("Please enter a valid date in the format YYYY-MM-DD (e.g. 2024-05-26).")
 
         scooter_info = {
             'serial_number': serial_number,
@@ -165,15 +195,27 @@ class ScooterHandler:
                 print("Invalid input. Please enter a number.")
 
         print(f"\n--- Updating Scooter (Service Engineer Mode): {serialnumber} ---")
-        state_of_charge = input("State of Charge (%): ")
+        while True:
+            state_of_charge = input("State of Charge (%): ")
+            try:
+                self.input_handler.clean_soc(state_of_charge)
+                break
+            except ValueError:
+                print("Please enter a valid number for state of charge (e.g. 80).")
+
         while True:
             target_range_input = input("Target Range SoC (min,max %) (e.g. 50,80): ")
             parts = [p.strip() for p in target_range_input.split(',')]
             if len(parts) == 2 and all(p.replace('.', '', 1).isdigit() for p in parts):
                 target_min_soc, target_max_soc = parts
-                break
+                try:
+                    self.input_handler.clean_target_soc_range(target_min_soc, target_max_soc)
+                    break
+                except ValueError:
+                    print("Please enter two numbers separated by a comma, e.g. 50,80.")
             else:
-                print("Please enter two numbers separated by a comma, e.g. 50,80.")        
+                print("Please enter two numbers separated by a comma, e.g. 50,80.")
+
         while True:
             location_input = input("Location (lat,long) (5 decimals): ")
             if location_input == "":
@@ -183,16 +225,36 @@ class ScooterHandler:
             if len(parts) == 2:
                 lat_str, long_str = parts
                 try:
-                    float(lat_str)
-                    float(long_str)
+                    self.input_handler.clean_location(lat_str, long_str)
                     break
                 except ValueError:
                     print("Latitude and longitude must be valid numbers (e.g. 51.92250, 4.47917) or leave empty to skip.")
             else:
-                print("Please enter latitude and longitude separated by a comma (e.g. 51.92250, 4.47917) or leave empty to skip.")        
-        out_of_service_status = input("Out of Service (0/1): ")
-        mileage = input("Mileage (km): ")
-        last_maintenance_date = input("Last Maintenance (YYYY-MM-DD): ")
+                print("Please enter latitude and longitude separated by a comma (e.g. 51.92250, 4.47917) or leave empty to skip.")
+
+        while True:
+            out_of_service_status = input("Out of Service (0/1): ")
+            try:
+                self.input_handler.clean_out_of_service(out_of_service_status)
+                break
+            except ValueError:
+                print("Please enter 0 (in service) or 1 (out of service).")
+
+        while True:
+            mileage = input("Mileage (km): ")
+            try:
+                self.input_handler.clean_mileage(mileage)
+                break
+            except ValueError:
+                print("Please enter a valid number for mileage (e.g. 8000).")
+
+        while True:
+            last_maintenance_date = input("Last Maintenance (YYYY-MM-DD): ")
+            try:
+                self.input_handler.clean_last_maintenance_date(last_maintenance_date)
+                break
+            except ValueError:
+                print("Please enter a valid date in the format YYYY-MM-DD (e.g. 2024-05-26).")
 
         newinfo = {
             'serial_number': serialnumber,
@@ -297,21 +359,67 @@ class ScooterHandler:
                 print("Invalid input. Please enter a number.")
 
         print(f"\n--- Updating Scooter: {serialnumber} ---")
-        brand = input("Scooter Brand: ")
-        model = input("Scooter Model: ")
-        serial_number = input("Scooter Serial Number (10-17 alphanumeric): ")
-        top_speed = input("Top Speed (km/h): ")
-        battery_capacity = input("Battery Capacity (Wh): ")
-        state_of_charge = input("State of Charge (%): ")
+        while True:
+            serial_number = input("Scooter Serial Number (10-17 alphanumeric): ")
+            try:
+                self.input_handler.clean_serial_number(serial_number)
+                break
+            except ValueError:
+                print("Please enter a valid serial number (10–17 characters, letters and numbers only).")
+
+        while True:
+            brand = input("Scooter Brand: ")
+            try:
+                self.input_handler.clean_brand(brand)
+                break
+            except ValueError:
+                print("Please enter a valid brand name (cannot be empty).")
+
+        while True:
+            model = input("Scooter Model: ")
+            try:
+                self.input_handler.clean_model(model)
+                break
+            except ValueError:
+                print("Please enter a valid model name (cannot be empty).")
+
+        while True:
+            top_speed = input("Top Speed (km/h): ")
+            try:
+                self.input_handler.clean_top_speed(top_speed)
+                break
+            except ValueError:
+                print("Please enter a valid number for top speed (e.g. 75).")
+
+        while True:
+            battery_capacity = input("Battery Capacity (Wh): ")
+            try:
+                self.input_handler.clean_battery_capacity(battery_capacity)
+                break
+            except ValueError:
+                print("Please enter a valid number for battery capacity (e.g. 200).")
+
+        while True:
+            state_of_charge = input("State of Charge (%): ")
+            try:
+                self.input_handler.clean_soc(state_of_charge)
+                break
+            except ValueError:
+                print("Please enter a valid number for state of charge (e.g. 80).")
+
         while True:
             target_range_input = input("Target Range SoC (min,max %) (e.g. 50,80): ")
             parts = [p.strip() for p in target_range_input.split(',')]
             if len(parts) == 2 and all(p.replace('.', '', 1).isdigit() for p in parts):
                 target_min_soc, target_max_soc = parts
-                break
+                try:
+                    self.input_handler.clean_target_soc_range(target_min_soc, target_max_soc)
+                    break
+                except ValueError:
+                    print("Please enter two numbers separated by a comma, e.g. 50,80.")
             else:
-                print("Please enter two numbers separated by a comma, e.g. 50,80.")        
-        old_lat, old_lon = [s.strip() for s in selected_scooter['location'].split(',')]
+                print("Please enter two numbers separated by a comma, e.g. 50,80.")
+
         while True:
             location_input = input("Location (lat,long) (5 decimals): ")
             if location_input == "":
@@ -321,16 +429,36 @@ class ScooterHandler:
             if len(parts) == 2:
                 lat_str, long_str = parts
                 try:
-                    float(lat_str)
-                    float(long_str)
+                    self.input_handler.clean_location(lat_str, long_str)
                     break
                 except ValueError:
                     print("Latitude and longitude must be valid numbers (e.g. 51.92250, 4.47917) or leave empty to skip.")
             else:
                 print("Please enter latitude and longitude separated by a comma (e.g. 51.92250, 4.47917) or leave empty to skip.")
-        out_of_service_status = input("Out of Service (0/1): ")
-        mileage = input("Mileage (km): ")
-        last_maintenance_date = input("Last Maintenance (YYYY-MM-DD): ")
+
+        while True:
+            out_of_service_status = input("Out of Service (0/1): ")
+            try:
+                self.input_handler.clean_out_of_service(out_of_service_status)
+                break
+            except ValueError:
+                print("Please enter 0 (in service) or 1 (out of service).")
+
+        while True:
+            mileage = input("Mileage (km): ")
+            try:
+                self.input_handler.clean_mileage(mileage)
+                break
+            except ValueError:
+                print("Please enter a valid number for mileage (e.g. 8000).")
+
+        while True:
+            last_maintenance_date = input("Last Maintenance (YYYY-MM-DD): ")
+            try:
+                self.input_handler.clean_last_maintenance_date(last_maintenance_date)
+                break
+            except ValueError:
+                print("Please enter a valid date in the format YYYY-MM-DD (e.g. 2024-05-26).")
 
         newinfo = {
             'serial_number': serial_number,
@@ -440,11 +568,17 @@ class ScooterHandler:
             except ValueError:
                 print("Invalid input. Please enter a number.")
 
-        confirm = input(f"Are you sure you want to delete scooter '{serialnumber}'? This cannot be undone (yes/no): ").strip().lower()
-        if confirm != 'yes':
-            print("Deletion cancelled.")
-            self.logger.writelog(username, "Delete Scooter Cancelled", f"Cancelled deletion of scooter '{serialnumber}'.")
-            return
+        while True:
+            confirm = input(f"Are you sure you want to delete scooter '{serialnumber}'? Type yes to confirm: ").strip().lower()
+            if confirm == "yes":
+                break
+            elif confirm == "no" or confirm == "":
+                print("Deletion cancelled.")
+                self.logger.writelog(username, "Delete Scooter Cancelled", f"Cancelled deletion of scooter '{serialnumber}'.")
+                return
+            else:
+                print("Please type 'yes' or press Enter to cancel.")
+
 
         try:
             self.db_handler.deleterecord('scooters', 'serial_number', serialnumber)

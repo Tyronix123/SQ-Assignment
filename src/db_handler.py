@@ -18,18 +18,15 @@ class DBHandler:
         self.connect_to_db()
 
     def _sanitize_identifier(self, identifier: str) -> str:
-        """Sanitize table/column names to prevent SQL injection"""
         if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', identifier):
             raise ValueError(f"Invalid identifier: {identifier}")
         return identifier
 
     def _validate_table_name(self, table_name: str) -> bool:
-        """Validate that table name is safe"""
         valid_tables = {'users', 'travellers', 'scooters', 'logs', 'restore_codes'}
         return table_name in valid_tables
 
     def _is_query_safe(self, query: str) -> bool:
-        """Basic check for potentially dangerous SQL patterns"""
         dangerous_patterns = [
             r";\s*--", r";\s*#",
             r"\b(?:DROP|TRUNCATE|ALTER|CREATE|REPLACE)\b",

@@ -64,14 +64,10 @@ class User:
             hashed_password = self.makepasswordhash(newpassword)
 
             try:
-                self.db_handler.updateexistingrecord(
-                    'users',
-                    'username',
-                    target_user_raw['username'],
-                    {'password_hash': hashed_password}
-                )
+                self.db_handler.updateexistingrecord('users', 'username', target_user_raw['username'], {'password_hash': hashed_password})
                 print(f"Password for {self.role} '{self.username}' has been successfully changed!")
                 self.logger.writelog(self.username, f"Change {self.role} Password", f"Password for '{self.username}' changed.")
+                self.logout()
                 return True
             except Exception as e:
                 print(f"A problem happened while changing password for '{self.username}'. Error: {e}")
